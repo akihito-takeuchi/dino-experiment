@@ -773,11 +773,11 @@ void ObjectData::Impl::RefreshLocalChildren() {
   std::vector<DObjInfo> children;
   std::copy_if(local_children_.cbegin(), local_children_.cend(),
                std::back_inserter(children),
-               [this] (auto& c) { return IsChildFlat(c.Name()); });
+               [this] (auto& c) { return this->IsChildFlat(c.Name()); });
   local_children_.erase(
       std::remove_if(
           local_children_.begin(), local_children_.end(),
-          [this] (auto& c) { return !IsChildFlat(c.Name()); }),
+          [this] (auto& c) { return !this->IsChildFlat(c.Name()); }),
       local_children_.end());
   auto dirs = boost::make_iterator_range(
       fs::directory_iterator(dir_path_),
