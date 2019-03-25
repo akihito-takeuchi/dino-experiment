@@ -10,7 +10,7 @@
 #include "dino/core/dobjpath.h"
 #include "dino/core/dobjinfo.h"
 #include "dino/core/dvalue.h"
-#include "dino/core/ptrdefs.h"
+#include "dino/core/fwd.h"
 
 namespace dino {
 

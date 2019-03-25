@@ -8,7 +8,7 @@
 
 #include "dino/core/fspath.h"
 #include "dino/core/dobjpath.h"
-#include "dino/core/ptrdefs.h"
+#include "dino/core/fwd.h"
 #include "dino/core/filetypes.h"
 
 namespace dino {

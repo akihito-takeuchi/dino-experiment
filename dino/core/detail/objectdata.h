@@ -9,7 +9,7 @@
 #include <unordered_map>
 #include <boost/interprocess/sync/file_lock.hpp>
 
-#include "dino/core/ptrdefs.h"
+#include "dino/core/fwd.h"
 #include "dino/core/fspath.h"
 #include "dino/core/dobjpath.h"
 #include "dino/core/dobjinfo.h"
