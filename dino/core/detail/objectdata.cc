@@ -172,10 +172,12 @@ class ObjectData::Impl {
   bool HasLocalChild(const std::string& name) const;
   bool IsLocalChild(const std::string& name) const;
   std::vector<DObjInfo> Children() const;
+  size_t ChildCount() const;
   bool IsFlattened() const;
   bool IsChildFlat(const std::string& name) const;
   void SetChildFlat(const std::string& name);
   void UnsetChildFlat(const std::string& name);
+  DObjectSp GetChildObject(size_t index) const;
   DObjectSp GetChildObject(const std::string& name) const;
   DObjectSp CreateChild(const std::string& name,
                         const std::string& type,
@@ -436,6 +438,11 @@ std::vector<DObjInfo> ObjectData::Impl::Children() const {
   return children_;
 }
 
+size_t ObjectData::Impl::ChildCount() const {
+  RefreshChildrenInBase();
+  return children_.size();
+}
+
 bool ObjectData::Impl::IsFlattened() const {
   if (!parent_)
     return false;
@@ -488,6 +495,15 @@ void ObjectData::Impl::UnsetChildFlat(const std::string& name) {
   for (auto grand_child_info : child_data->Children())
     child_data->UnsetChildFlat(grand_child_info.Name());
   child_flat_flags_[name] = false;
+}
+
+DObjectSp ObjectData::Impl::GetChildObject(size_t index) const {
+  RefreshChildrenInBase();
+  if (index > children_.size())
+    BOOST_THROW_EXCEPTION(
+        ObjectDataException(kErrChildIndexOutOfRange)
+        << ExpInfo1(index) << ExpInfo2(Path().String()));
+  return owner_->GetObject(children_[index].Path());
 }
 
 DObjectSp ObjectData::Impl::GetChildObject(const std::string& name) const {
@@ -975,6 +991,10 @@ std::vector<DObjInfo> ObjectData::Children() const {
   return impl_->Children();
 }
 
+size_t ObjectData::ChildCount() const {
+  return impl_->ChildCount();
+}
+
 bool ObjectData::IsFlattened() const {
   return impl_->IsFlattened();
 }
@@ -990,6 +1010,10 @@ void ObjectData::SetChildFlat(const std::string& name) {
 void ObjectData::UnsetChildFlat(const std::string& name) {
   impl_->UnsetChildFlat(name);
 }  
+
+DObjectSp ObjectData::GetChildObject(size_t index) const {
+  return impl_->GetChildObject(index);
+}
 
 DObjectSp ObjectData::GetChildObject(const std::string& name) const {
   return impl_->GetChildObject(name);

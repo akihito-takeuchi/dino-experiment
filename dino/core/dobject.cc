@@ -149,6 +149,14 @@ std::vector<DObjInfo> DObject::Children() const {
   return impl_->GetRawData()->Children();
 }
 
+size_t DObject::ChildCount() const {
+  return impl_->GetRawData()->ChildCount();
+}
+
+DObjectSp DObject::GetChildObject(size_t index) const {
+  return impl_->GetRawData()->GetChildObject(index);
+}
+
 DObjectSp DObject::GetChildObject(const std::string& name) const {
   return impl_->GetRawData()->GetChildObject(name);
 }

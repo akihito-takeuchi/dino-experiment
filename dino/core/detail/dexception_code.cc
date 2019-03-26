@@ -35,6 +35,8 @@ extern const int kErrExpiredObjectToBase = RegisterErrorCode(
     311, "Can't set the expired object '{}' as the base of '{}'", 2);
 extern const int kErrNotBaseObject = RegisterErrorCode(
     312, "The object '{}' is not the base of '{}'", 2);
+extern const int kErrChildIndexOutOfRange = RegisterErrorCode(
+    313, "The child index '{}' out of range at '{}'", 2);
 
 extern const int kErrUnknownFileFormat = RegisterErrorCode(
     400, "Unknown file format number '{}'", 1);

@@ -46,6 +46,8 @@ class DObject {
   bool HasLocalChild(const std::string& name) const;
   bool IsLocalChild(const std::string& name) const;
   std::vector<DObjInfo> Children() const;
+  size_t ChildCount() const;
+  DObjectSp GetChildObject(size_t index) const;
   DObjectSp GetChildObject(const std::string& name) const;
   DObjectSp CreateChild(const std::string& name,
                         const std::string& type,

@@ -51,10 +51,12 @@ class ObjectData {
   bool HasLocalChild(const std::string& name) const;
   bool IsLocalChild(const std::string& name) const;
   std::vector<DObjInfo> Children() const;
+  size_t ChildCount() const;
   bool IsFlattened() const;
   bool IsChildFlat(const std::string& name) const;
   void SetChildFlat(const std::string& name);
   void UnsetChildFlat(const std::string& name);
+  DObjectSp GetChildObject(size_t index) const;
   DObjectSp GetChildObject(const std::string& name) const;
   DObjectSp CreateChild(const std::string& name,
                         const std::string& type,

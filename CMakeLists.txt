@@ -44,6 +44,18 @@ include_directories(${SPDLOG_ROOT}/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 add_subdirectory("dino/core")
 
+set(enable-qt true)
+
+if(enable-qt)
+  set(QTDIR $ENV{QTDIR})
+  set(CMAKE_PREFIX_PATH ${QTDIR})
+  set(CMAKE_AUTOMOC on)
+  set(CMAKE_INCLUDE_CURRENT_DIR on)
+  find_package(Qt5Core REQUIRED)
+  find_package(Qt5Widgets REQUIRED)
+  add_subdirectory("dino/qt")
+endif(enable-qt)
+
 # For test
 set(with-test true)
 
