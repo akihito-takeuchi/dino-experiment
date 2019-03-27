@@ -56,6 +56,7 @@ int RegisterErrorCode(int error_code, const char* msg, int info_count);
 extern const int kErrObjectName;
 extern const int kErrObjectAlreadyExists;
 extern const int kErrFailedToGetCurrentUserName;
+extern const int kErrObjectTypeNotRegistered;
 extern const int kErrObjectDataAlreadyExists;
 extern const int kErrObjectDoesNotExist;
 extern const int kErrTopLevelObjectAlreadyInitialized;

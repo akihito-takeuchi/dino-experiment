@@ -5,6 +5,7 @@ add_library(dino_core SHARED
   logger.cc
   dobject.cc
   currentuser.cc
+  objectfactory.cc
   detail/objectdata.cc
   detail/dataiofactory.cc
   detail/jsondataio.cc

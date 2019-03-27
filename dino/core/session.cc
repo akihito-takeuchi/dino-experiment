@@ -17,6 +17,7 @@
 #include "dino/core/sessionexception.h"
 #include "dino/core/dobject.h"
 #include "dino/core/dexception.h"
+#include "dino/core/objectfactory.h"
 #include "dino/core/detail/objectdata.h"
 #include "dino/core/detail/dataiofactory.h"
 #include "dino/core/detail/jsonwritersupport.h"
@@ -462,7 +463,7 @@ DObjectSp Session::Impl::MakeObject(const DObjPath& obj_path) const {
         SessionException(kErrObjectDataNotOpened)
         << ExpInfo1(obj_path.String()));
   auto data = obj_data_map_.find(obj_path)->second;
-  return std::make_shared<DObject>(data);
+  return std::shared_ptr<DObject>(ObjectFactory::Instance().Create(data));
 }
 
 void Session::Impl::PurgeObject(const DObjPath& obj_path) {

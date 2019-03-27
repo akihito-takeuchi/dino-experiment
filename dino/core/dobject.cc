@@ -16,7 +16,7 @@ namespace dino {
 namespace core {
 
 struct DObject::Impl {
-  Impl(DataWp data) :
+  Impl(const DataWp& data) :
       data_(data),
       raw_data_(data.lock().get()) {
     raw_data_->IncRef();
@@ -81,7 +81,7 @@ void DObject::Impl::RequireEditable() {
         << ExpInfo1(Name()));
 }
 
-DObject::DObject(DataWp data)
+DObject::DObject(const DataWp& data)
     : impl_(std::make_unique<Impl>(data)) {
 }
 

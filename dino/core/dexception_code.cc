@@ -7,12 +7,15 @@ namespace dino {
 
 namespace core {
 
+
 extern const int kErrObjectName = RegisterErrorCode(
     1, "Invalid object name -> '{}'", 1);
 extern const int kErrInvalidObjectString = RegisterErrorCode(
     2, "Invalid object info string -> '{}'", 1);
 extern const int kErrFailedToGetCurrentUserName = RegisterErrorCode(
     3, "Failed to get current user name", 0);
+extern const int kErrObjectTypeNotRegistered = RegisterErrorCode(
+    4, "Object type '{}' has not been registered", 1);
 
 extern const int kErrObjectAlreadyExists = RegisterErrorCode(
     100, "The object '{}' already exists", 1);

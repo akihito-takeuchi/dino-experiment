@@ -21,7 +21,7 @@ class CurrentUser {
   std::string Name() const;
   bool IsWritable(const FsPath& path) const;
 
-  static CurrentUser &Instance();
+  static CurrentUser& Instance();
 
  private:
   CurrentUser();

@@ -26,7 +26,7 @@ using DataWp = std::weak_ptr<detail::ObjectData>;
 
 class DObject {
  public:
-  DObject(DataWp data);
+  DObject(const DataWp& data);
   virtual ~DObject();
 
   bool HasKey(const std::string& key) const;
