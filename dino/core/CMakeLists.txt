@@ -2,7 +2,6 @@ add_library(dino_core SHARED
   dexception.cc
   dexception_code.cc
   session.cc
-  logger.cc
   dobject.cc
   currentuser.cc
   objectfactory.cc

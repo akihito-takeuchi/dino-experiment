@@ -36,10 +36,6 @@ include_directories(${FMT_ROOT}/include)
 set(RAPIDJSON_ROOT "${CMAKE_CURRENT_LIST_DIR}/third_party/rapidjson")
 include_directories(${RAPIDJSON_ROOT}/include)
 
-# Setup spdlog
-set(SPDLOG_ROOT "${CMAKE_CURRENT_LIST_DIR}/third_party/spdlog")
-include_directories(${SPDLOG_ROOT}/include)
-
 # Dino
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 add_subdirectory("dino/core")
