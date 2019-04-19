@@ -12,6 +12,7 @@
 
 namespace dc = dino::core;
 namespace fs = boost::filesystem;
+auto& nil = dc::nil;
 
 namespace {
 
@@ -22,6 +23,7 @@ const std::string kTopName3 = "top3";
 const std::string kTopName4 = "top4";
 const std::string kTopName5 = "top5";
 const std::string kTopName6 = "top6";
+const std::string kTopName7 = "top7";
 const std::string kChildName1 = "child1";
 const std::string kChildName2 = "child2";
 const std::string kChildName3 = "child3";
@@ -35,7 +37,8 @@ class ObjectTest : public ::testing::Test {
     if (fs::exists(kWspFile))
       fs::remove(kWspFile);
     for (auto dir_name
-             : {kTopName1, kTopName2, kTopName3, kTopName4, kTopName5, kTopName6,
+             : {kTopName1, kTopName2, kTopName3, kTopName4,
+               kTopName5, kTopName6, kTopName7,
                 kChildName1, kChildName2, kChildName3, kChildName4})
       if (fs::exists(dir_name))
         fs::remove_all(dir_name);
@@ -205,15 +208,15 @@ TEST_F(ObjectTest, Flat) {
     ASSERT_FALSE(child4->IsDirty());
     
     top->Put("ValueTop1", 100);
-    top->Put("ValueTop2", "test");
+    top->Put("ValueTop2", std::string("test"));
     top->Put("ValueTop3", 100.5);
     child1->Put("Child1Value1", 100);
     child1->Put("Child1Value2", 3.14);
-    child1->Put("Child1Value3", "test");
-    child2->Put("Child2Value1", "This is test value");
+    child1->Put("Child1Value3", std::string("test"));
+    child2->Put("Child2Value1", std::string("This is test value"));
     child2->Put("Child2Value2", -300);
     child3->Put("Child3Value1", true);
-    child3->Put("Child3Value2", dc::DNil());
+    child3->Put("Child3Value2", nil);
     child4->Put("Child4Value1", false);
     child4->Put("Child4Value2", 1234);
 
@@ -314,7 +317,7 @@ TEST_F(ObjectTest, Flat) {
     ASSERT_TRUE(child2->Get("Child2Value1") == "This is test value");
     ASSERT_TRUE(child2->Get("Child2Value2") == -300);
     ASSERT_TRUE(child3->Get("Child3Value1") == true);
-    ASSERT_TRUE(child3->Get("Child3Value2") == dc::DNil());
+    ASSERT_TRUE(child3->Get("Child3Value2") == nil);
     ASSERT_TRUE(child4->Get("Child4Value1") == false);
     ASSERT_TRUE(child4->Get("Child4Value2") == 1234);
 
@@ -372,12 +375,12 @@ TEST_F(ObjectTest, FlattenBeforeDirInit) {
     session->InitTopLevelObjectPath(kTopName4, kTopName4);
     
     top->Put("ValueTop1", 100);
-    top->Put("ValueTop2", "test");
+    top->Put("ValueTop2", std::string("test"));
     top->Put("ValueTop3", 100.5);
     child1->Put("Child1Value1", 100);
     child1->Put("Child1Value2", 3.14);
-    child1->Put("Child1Value3", "test");
-    child2->Put("Child2Value1", "This is test value");
+    child1->Put("Child1Value3", std::string("test"));
+    child2->Put("Child2Value1", std::string("This is test value"));
     child2->Put("Child2Value2", -300);
 
     ASSERT_TRUE(top->IsDirty());
@@ -481,4 +484,32 @@ TEST_F(ObjectTest, ExtraFileInObjectDir) {
   ASSERT_FALSE(fs::exists(child2_str + "/child.json"));
   ASSERT_FALSE(fs::exists(child2_str + "/child.json.lock"));
   ASSERT_TRUE(fs::exists(child2_str + "/test.txt"));
+}
+
+TEST_F(ObjectTest, StoreArray) {
+  {
+    auto session = dc::Session::Create(kWspFile);
+    auto top = session->CreateTopLevelObject(kTopName7, "top");
+    session->InitTopLevelObjectPath(kTopName7, kTopName7);
+    dc::DValueArray values;
+    values.push_back(1);
+    values.push_back(1.5);
+    values.push_back(false);
+    values.push_back(std::string("test"));
+    values.push_back(nil);
+    auto child = top->CreateChild(kChildName1, "child");
+    child->Put("test_key", values);
+    child->Save();
+    session->Save();
+  }
+  {
+    auto session = dc::Session::Open(kWspFile);
+    auto child = session->OpenObject(kTopName7 + "/" + kChildName1);
+    auto values = boost::get<dc::DValueArray>(child->Get("test_key"));
+    ASSERT_EQ(values[0], 1);
+    ASSERT_EQ(values[1], 1.5);
+    ASSERT_EQ(values[2], false);
+    ASSERT_EQ(values[3], std::string("test"));
+    ASSERT_EQ(values[4], nil);
+  }
 }

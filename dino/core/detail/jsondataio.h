@@ -28,6 +28,7 @@ class JsonDataIO : public DataIO {
   virtual void ToSection(const DObjInfo& obj_info) override;
   virtual void ToSectionUp() override;
   virtual void WriteDict(const DValueDict& values) override;
+  void WriteValue(const DValue& value);
   virtual void CloseForWrite() override;
   virtual void Load(const FsPath& file_path,
                     const ReadDataArgPtr& arg) override;

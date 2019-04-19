@@ -4,6 +4,7 @@
 #pragma once
 
 #include "dino/core/detail/jsonexception.h"
+#include "dino/core/dvalue.h"
 
 namespace dino {
 
@@ -20,7 +21,7 @@ class WriteData : public boost::static_visitor<bool> {
     BOOST_THROW_EXCEPTION(JsonException(kErrJsonWriteData));
     return false;
   }
-  bool operator()(const DNil&) {
+  bool operator()(const DNilType&) {
     return writer_.Null();
   }
   bool operator()(bool value) {

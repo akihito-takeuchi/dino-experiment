@@ -12,6 +12,8 @@
 namespace dc = dino::core;
 namespace fs = boost::filesystem;
 
+auto& nil = dc::nil;
+
 namespace {
 
 const std::string kWspFile = "dino.wsp";
@@ -37,12 +39,12 @@ TEST_F(DataIOTest, WithoutSave) {
   ASSERT_TRUE(session);
   dc::DObjectSp obj(session->CreateTopLevelObject(kObjName1, kObjName1));
   ASSERT_FALSE(obj->HasKey("test"));
-  obj->Put("test", "test value");
+  obj->Put("test", std::string("test value"));
   ASSERT_EQ(obj->Get("test"), "test value");
 
   ASSERT_FALSE(obj->HasKey("test2"));
   ASSERT_THROW(obj->Get("test2"), dc::DException);
-  ASSERT_EQ(obj->Get("test2", dc::DNil()), dc::DNil());
+  ASSERT_EQ(obj->Get("test2", nil), nil);
   
   obj->Put("test3", 10);
   ASSERT_TRUE(obj->Get("test3") == 10);

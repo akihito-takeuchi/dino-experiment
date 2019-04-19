@@ -42,33 +42,34 @@ class ReadData : public BaseReaderHandler<UTF8<>, ReadData> {
   ReadData(const ReadDataArgPtr& arg) {
     PushNewStack(arg);
   }
-  bool Null() {
-    (*(cxt->current_dict))[cxt->current_key] = DNil();
+  template<typename T>
+  bool StoreValue(T value) {
+    if (cxt->current_array_stack.empty())
+      (*(cxt->current_dict))[cxt->current_key] = value;
+    else
+      cxt->current_array_stack.back()->emplace_back(value);
     return true;
+  }
+  bool Null() {
+    return StoreValue(nil);
   }
   bool Bool(bool v) {
-    (*(cxt->current_dict))[cxt->current_key] = v;
-    return true;
+    return StoreValue(v);
   }
   bool Int(int v) {
-    (*(cxt->current_dict))[cxt->current_key] = v;
-    return true;
+    return StoreValue(v);
   }
   bool Uint(unsigned v) {
-    (*(cxt->current_dict))[cxt->current_key] = static_cast<int>(v);
-    return true;
+    return StoreValue(static_cast<int>(v));
   }
   bool Int64(int64_t v) {
-    (*(cxt->current_dict))[cxt->current_key] = static_cast<int>(v);
-    return true;
+    return StoreValue(static_cast<int>(v));
   }
   bool Double(double v) {
-    (*(cxt->current_dict))[cxt->current_key] = v;
-    return true;
+    return StoreValue(v);
   }
   bool String(const char* str, SizeType length, bool) {
-    (*(cxt->current_dict))[cxt->current_key] = std::string(str, str + length);
-    return true;
+    return StoreValue(std::string(str, str + length));
   }
   bool Key(const char* str, SizeType length, bool) {
     std::string key(str, str + length);
@@ -102,6 +103,23 @@ class ReadData : public BaseReaderHandler<UTF8<>, ReadData> {
     }
     return true;
   }
+  bool StartArray() {
+    DValueArray* new_array;
+    if (cxt->current_array_stack.empty()) {
+      (*(cxt->current_dict))[cxt->current_key] = DValueArray();
+      new_array = &boost::get<DValueArray&>(
+          (*(cxt->current_dict))[cxt->current_key]);
+    } else {
+      cxt->current_array_stack.back()->push_back(DValueArray());
+      new_array = cxt->current_array_stack.back();
+    }
+    cxt->current_array_stack.push_back(new_array);
+    return true;
+  }
+  bool EndArray(SizeType) {
+    cxt->current_array_stack.pop_back();
+    return true;
+  }
   void PushNewStack(const ReadDataArgPtr& arg) {
     cxt_stack.emplace_back(ReadContext(arg));
     cxt = &(cxt_stack.back());
@@ -118,9 +136,11 @@ class ReadData : public BaseReaderHandler<UTF8<>, ReadData> {
     ReadContext() = default;
     ReadContext(const ReadDataArgPtr& arg) : arg(arg) {}
     bool reading_dict = false;
+    bool reading_array = false;
     bool in_child_section = false;
     std::string current_key;
     DValueDict* current_dict = nullptr;
+    std::vector<DValueArray*> current_array_stack;
     ReadDataArgPtr arg;
   };
   std::vector<ReadContext> cxt_stack;
@@ -208,9 +228,20 @@ void JsonDataIO::ToSectionUp() {
 }
 
 void JsonDataIO::WriteDict(const DValueDict& values) {
-  for (auto kv : values) {
+  for (auto& kv : values) {
     impl_->writer->Key(kv.first.c_str());
-    boost::apply_visitor(*(impl_->data_writer), kv.second);
+    WriteValue(kv.second);
+  }
+}
+
+void JsonDataIO::WriteValue(const DValue& value) {
+  if (IsArrayValue(value)) {
+    impl_->writer->StartArray();
+    for (auto& v : boost::get<DValueArray>(value))
+      WriteValue(v);
+    impl_->writer->EndArray();
+  } else {
+    boost::apply_visitor(*(impl_->data_writer), value);
   }
 }
 

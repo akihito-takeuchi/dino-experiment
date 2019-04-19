@@ -24,7 +24,7 @@ std::regex kObjectNamePattern(R"(\w[0-9a-zA-Z_]*)");
 class DObjPath {
  public:
   DObjPath() = default;
-  explicit DObjPath(const std::string& path_str) {
+  DObjPath(const std::string& path_str) {
     boost::algorithm::split(path_elems_, path_str, boost::is_any_of("/"));
     path_elems_.erase(
         std::remove(path_elems_.begin(), path_elems_.end(), ""),
