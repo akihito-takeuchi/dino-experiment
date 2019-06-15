@@ -5,6 +5,8 @@ add_library(dino_core SHARED
   dobject.cc
   currentuser.cc
   objectfactory.cc
+  commandexecuter.cc
+  commandstack.cc
   detail/objectdata.cc
   detail/dataiofactory.cc
   detail/jsondataio.cc

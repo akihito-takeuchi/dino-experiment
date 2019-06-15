@@ -33,6 +33,7 @@ extern const int kErrNoKey;
 extern const int kErrExpiredObjectToBase;
 extern const int kErrNotBaseObject;
 extern const int kErrChildIndexOutOfRange;
+extern const int kErrCommandStackAlreadyEnabled;
 
 }  // namespace detail
 

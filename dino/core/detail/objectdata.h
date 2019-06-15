@@ -16,6 +16,7 @@
 #include "dino/core/dobjfileinfo.h"
 #include "dino/core/dvalue.h"
 #include "dino/core/filetypes.h"
+#include "dino/core/connection.h"
 #include "dino/core/detail/dataio.h"
 
 namespace dino {
@@ -42,6 +43,7 @@ class ObjectData {
   void RemoveKey(const std::string& key);
   bool IsLocal(const std::string& key) const;
   DObjPath Where(const std::string& key) const;
+  std::vector<std::string> Keys(bool local_only=false) const;
 
   std::string Type() const;
   FsPath DirPath() const;
@@ -61,6 +63,7 @@ class ObjectData {
   DObjectSp CreateChild(const std::string& name,
                         const std::string& type,
                         bool is_flattened);
+  void RemoveChild(const std::string& name);
   void AddChildInfo(const DObjInfo& child_info);
 
   void AcquireWriteLock();
@@ -76,11 +79,19 @@ class ObjectData {
   std::vector<DObjectSp> BaseObjects() const;
   void RemoveBase(const DObjectSp& base);
 
+  boost::signals2::connection AddListener(
+      const ListenerFunc& listener);
+
+  CommandStackSp EnableCommandStack(bool enable);
+  CommandStackSp GetCommandStack() const;
+
   void Save();
   void RefreshChildren();
 
   void IncRef();
   void DecRef(bool by_editable_ref);
+
+  ObjectData* GetDataAt(const DObjPath& path);
 
   static DataSp Create(const DObjPath& obj_path,
                        const std::string& type,
@@ -95,6 +106,21 @@ class ObjectData {
   std::string DataFileName() const;
   FsPath DataFilePath() const;
   FsPath LockFilePath() const;
+
+  // Do actually
+  void ExecUpdateValue(const std::string& key,
+                       const DValue& new_value,
+                       const DValue& prev_value);
+  void ExecRemoveValue(const std::string& key,
+                       const DValue& prev_value);
+  void ExecAddValue(const std::string& key,
+                    const DValue& new_value);
+  DObjectSp ExecCreateChild(const std::string& name,
+                            const std::string& type,
+                            bool is_flattened);
+  void ExecRemoveChild(const std::string& name);
+  void ExecAddBase(const DObjectSp& base);
+  void ExecRemoveBase(const DObjectSp& base);
 
  private:
   ObjectData(const DObjPath& obj_path,

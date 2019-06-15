@@ -10,6 +10,7 @@
 #include "dino/core/dobjpath.h"
 #include "dino/core/dobjinfo.h"
 #include "dino/core/dvalue.h"
+#include "dino/core/connection.h"
 #include "dino/core/fwd.h"
 
 namespace dino {
@@ -36,6 +37,7 @@ class DObject {
   void RemoveKey(const std::string& key);
   bool IsLocal(const std::string& key) const;
   DObjPath Where(const std::string& key) const;
+  std::vector<std::string> Keys(bool local_only=false) const;
 
   std::string Name() const;
   std::string Type() const;
@@ -70,6 +72,12 @@ class DObject {
   void AddBase(const DObjectSp& base);
   std::vector<DObjectSp> BaseObjects() const;
   void RemoveBase(const DObjectSp& base);
+
+  boost::signals2::connection AddListener(
+      const ListenerFunc& listener);
+
+  CommandStackSp EnableCommandStack(bool enable = true);
+  CommandStackSp GetCommandStack() const;
 
   void Save();
 

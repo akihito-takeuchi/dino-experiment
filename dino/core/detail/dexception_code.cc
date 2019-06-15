@@ -37,6 +37,8 @@ extern const int kErrNotBaseObject = RegisterErrorCode(
     312, "The object '{}' is not the base of '{}'", 2);
 extern const int kErrChildIndexOutOfRange = RegisterErrorCode(
     313, "The child index '{}' out of range at '{}'", 2);
+extern const int kErrCommandStackAlreadyEnabled = RegisterErrorCode(
+    314, "Command stack is already enabled at '{}'.", 1);
 
 extern const int kErrUnknownFileFormat = RegisterErrorCode(
     400, "Unknown file format number '{}'", 1);

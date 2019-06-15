@@ -117,6 +117,11 @@ DObjPath DObject::Where(const std::string& key) const {
   return impl_->GetRawData()->Where(key);
 }
 
+std::vector<std::string> DObject::Keys(bool local_only) const {
+  return impl_->GetRawData()->Keys(local_only);
+}
+
+
 std::string DObject::Name() const {
   return impl_->Name();
 }
@@ -232,6 +237,19 @@ std::vector<DObjectSp> DObject::BaseObjects() const {
 
 void DObject::RemoveBase(const DObjectSp& base) {
   return impl_->GetRawData()->RemoveBase(base);
+}
+
+boost::signals2::connection DObject::AddListener(
+    const ListenerFunc& listener) {
+  return impl_->GetRawData()->AddListener(listener);
+}
+
+CommandStackSp DObject::EnableCommandStack(bool enable) {
+  return impl_->GetRawData()->EnableCommandStack(enable);
+}
+
+CommandStackSp DObject::GetCommandStack() const {
+  return impl_->GetRawData()->GetCommandStack();
 }
 
 void DObject::Save() {

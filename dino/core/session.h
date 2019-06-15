@@ -54,9 +54,14 @@ class Session {
 
  private:
   Session();
+  DObjectSp CreateObjectImpl(const DObjPath& obj_info,
+                             const std::string& type,
+                             bool is_flattened = false);
 
   class Impl;
   std::unique_ptr<Impl> impl_;
+
+  friend class detail::ObjectData;
 };
 
 }  // namespace core

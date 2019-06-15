@@ -102,9 +102,9 @@ class Session::Impl {
                                  const std::string& type);
   void InitTopLevelObjectPath(const std::string& name,
                               const FsPath& dir_path);
-  DObjectSp CreateObject(const DObjPath& obj_path,
-                         const std::string& type,
-                         bool is_flattened);
+  DObjectSp CreateObjectImpl(const DObjPath& obj_path,
+                             const std::string& type,
+                             bool is_flattened);
   DObjectSp GetObject(const DObjPath& obj_path) const;
   void PreNewObjectCheck(const DObjPath& obj_path) const;
   void PreOpenObjectCheck(const DObjPath& obj_path,
@@ -385,9 +385,9 @@ void Session::Impl::InitTopLevelObjectPath(const std::string& name,
   }
 }
 
-DObjectSp Session::Impl::CreateObject(const DObjPath& obj_path,
-                                      const std::string& type,
-                                      bool is_flattened) {
+DObjectSp Session::Impl::CreateObjectImpl(const DObjPath& obj_path,
+                                          const std::string& type,
+                                          bool is_flattened) {
   PreNewObjectCheck(obj_path);
   if (obj_path.IsTop())
     return CreateTopLevelObject(obj_path.LeafName(), type);
@@ -538,7 +538,17 @@ void Session::InitTopLevelObjectPath(const std::string& name,
 DObjectSp Session::CreateObject(const DObjPath& obj_path,
                                 const std::string& type,
                                 bool is_flattened) {
-  return impl_->CreateObject(obj_path, type, is_flattened);
+  if (obj_path.IsTop())
+    return CreateObjectImpl(obj_path, type, is_flattened);
+
+  auto parent = GetObject(obj_path.ParentPath());
+  return parent->CreateChild(obj_path.LeafName(), type, is_flattened);
+}
+
+DObjectSp Session::CreateObjectImpl(const DObjPath& obj_path,
+                                    const std::string& type,
+                                    bool is_flattened) {
+  return impl_->CreateObjectImpl(obj_path, type, is_flattened);
 }
 
 DObjectSp Session::OpenObject(const DObjPath& obj_path) {

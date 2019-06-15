@@ -15,6 +15,12 @@ using SessionPtr = std::unique_ptr<Session>;
 class DObject;
 using DObjectSp = std::shared_ptr<DObject>;
 
+class CommandExecuter;
+using CommandExecuterSp = std::shared_ptr<CommandExecuter>;
+
+class CommandStack;
+using CommandStackSp = std::shared_ptr<CommandStack>;
+
 }  // namespace core
 
 }  // namespace dino

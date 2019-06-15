@@ -13,6 +13,7 @@
 #include "dino/core/dobject.h"
 #include "dino/core/dexception.h"
 #include "dino/core/currentuser.h"
+#include "dino/core/commandstack.h"
 #include "dino/core/detail/dataiofactory.h"
 #include "dino/core/detail/objectdataexception.h"
 
@@ -29,33 +30,21 @@ namespace {
 
 const std::string kDataSectionName = "data";
 const char* kLockFileSuffix = ".lock";
-
-struct ListenType {
-  static const unsigned int kChildListUpdate = 0x1 << 0; 
-  static const unsigned int kValueUpdate     = 0x1 << 1; 
-  static const unsigned int kAttrUpdate      = 0x1 << 2; 
-};
+const unsigned int k_edit_type_mask =
+    static_cast<unsigned int>(CommandType::kEditTypeMask);
+const unsigned int k_command_group_mask =
+    static_cast<unsigned int>(CommandType::kValueUpdateType)
+    | static_cast<unsigned int>(CommandType::kBaseObjectUpdateType)
+    | static_cast<unsigned int>(CommandType::kChildListUpdateType);
 
 struct BaseObjInfo {
   BaseObjInfo() = default;
-  BaseObjInfo(const DObjPath& p, const DObjectSp& o) : path(p), obj(o) {}
+  BaseObjInfo(const DObjPath& p,
+              const DObjectSp& o)
+      : path(p), obj(o) {}
   DObjPath path;
   DObjectSp obj;
-};
-
-struct ListenerObjInfo {
-  ListenerObjInfo() = default;
-  ListenerObjInfo(const DObjectSp& o, unsigned int f)
-      : obj(o), listen_type_flags(f) {}
-  DObjectSp obj;
-  unsigned int listen_type_flags;
-};
-
-struct NotificationFlags {
-  bool child_list_updated = false;
-  void Clear() {
-    child_list_updated = false;
-  }
+  std::vector<boost::signals2::connection> connections;
 };
 
 void Remove(const fs::path& path) {
@@ -163,6 +152,7 @@ class ObjectData::Impl {
   void RemoveKey(const std::string& key);
   bool IsLocal(const std::string& key) const;
   DObjPath Where(const std::string& key) const;
+  std::vector<std::string> Keys(bool local_only) const;
 
   std::string Type() const;
   FsPath DirPath() const;
@@ -182,6 +172,7 @@ class ObjectData::Impl {
   DObjectSp CreateChild(const std::string& name,
                         const std::string& type,
                         bool is_flattened);
+  DObjectSp GetObject(const DObjPath& obj_path);
   void AddChildInfo(const DObjInfo& child_info);
 
   void AcquireWriteLock();
@@ -189,17 +180,24 @@ class ObjectData::Impl {
 
   void InitDirPath(const FsPath& dir_path);
 
-  bool IsDirty() const;
   void SetDirty(bool dirty);
+  bool IsDirty() const;
   bool IsEditable() const;
 
   void AddBase(const DObjectSp& base);
   std::vector<DObjectSp> BaseObjects() const;
   void RemoveBase(const DObjectSp& base);
 
+  boost::signals2::connection AddListener(
+      const ListenerFunc& listener);
+
   void Load();
   void Save();
   void RefreshChildren();
+
+  CommandStackSp EnableCommandStack(bool enable);
+  CommandStackSp GetCommandStack() const;
+  CommandExecuterSp Executer() const;
 
   void IncRef();
   void DecRef(bool by_editable_ref);
@@ -217,6 +215,18 @@ class ObjectData::Impl {
   FsPath DataFilePath() const;
   FsPath LockFilePath() const;
 
+  void ExecUpdateValue(const std::string& key,
+                       const DValue& new_value,
+                       const DValue& prev_value);
+  void ExecRemoveValue(const std::string& key, const DValue& prev_value);
+  void ExecAddValue(const std::string& key, const DValue& new_value);
+  void ExecRemoveChild(const std::string& name);
+  void ExecAddBase(const DObjectSp& base);
+  void ExecRemoveBase(const DObjectSp& base);
+
+  Session* Owner() const { return owner_; }
+  void EmitSignal(const Command& cmd) { sig_(cmd); }
+
  private:
   void Save(const std::unique_ptr<DataIO>& data_io);
   bool InitDirPathImpl(const FsPath& dir_path);
@@ -227,10 +237,7 @@ class ObjectData::Impl {
                         bool open_if_not_opened) const;
   void RefreshLocalChildren();
   void RefreshChildrenInBase() const;
-  void AddListener(ListenerObjInfo&& listener);
-  void BecomeListner(const DObjectSp& subject, unsigned int flags);
-  void Notify();
-  void SetNeedBaseChildrenUpdate();
+  void ProcessBaseObjectUpdate(const Command& cmd);
 
   CreateChildFunc GenCreateChildFunc(
       ObjectData* parent, std::vector<DataSp>* descendants);
@@ -248,13 +255,13 @@ class ObjectData::Impl {
 
   std::vector<DObjInfo> local_children_;
   mutable std::vector<DObjInfo> children_;
-  std::vector<ListenerObjInfo> listeners_;
-  mutable bool need_base_children_update_ = true;
 
   mutable std::vector<BaseObjInfo> base_info_list_;
   std::unordered_map<std::string, bool> child_flat_flags_;
   std::unique_ptr<boost::interprocess::file_lock> lock_file_;
-  NotificationFlags notification_flags_;
+  boost::signals2::signal<void (const Command&)> sig_;
+  CommandStackSp command_stack_;
+  CommandExecuterSp default_command_executer_;
   FileFormat file_format_ = FileFormat::kJson;
   int editable_ref_count_ = 0;
   int ref_count_ = 0;
@@ -268,7 +275,8 @@ ObjectData::Impl::Impl(ObjectData* self,
                        Session* owner,
                        bool is_flattened) :
     self_(self), parent_(parent), obj_path_(obj_path),
-    type_(type), owner_(owner) {
+    type_(type), owner_(owner),
+    default_command_executer_(new CommandExecuter(owner, self)) {
   if (parent) {
     parent->AddChildInfo(DObjInfo(obj_path, type));
     auto parent_dir_path = parent->DirPath();
@@ -286,13 +294,17 @@ ObjectData::Impl::Impl(ObjectData* self,
                        ObjectData* parent,
                        Session* owner) :
     self_(self), parent_(parent), obj_path_(obj_path),
-    dir_path_(dir_path), type_(type), owner_(owner) {
+    dir_path_(dir_path), type_(type), owner_(owner),
+    default_command_executer_(new CommandExecuter(owner, self)) {
   data_file_name_ = DataIOFactory::DataFileName(type_, file_format_);
   RefreshLocalChildren();
 }
     
 ObjectData::Impl::~Impl() {
   RemoveLockFile();
+  for (auto& base_info : base_info_list_)
+    for (auto& connection : base_info.connections)
+      connection.disconnect();
 }
 
 struct HasKeyFuncInfo {
@@ -352,9 +364,16 @@ DValue ObjectData::Impl::Get(const std::string& key) const {
 
 void ObjectData::Impl::Put(const std::string& key, const DValue& value) {
   auto itr = values_.find(key);
-  if (itr == values_.cend() || itr->second != value)
-    SetDirty(true);
-  values_[key] = value;
+  auto edit_type = CommandType::kUnknown;
+  auto prev_value = DValue(nil);
+  if (itr == values_.cend()) {
+    edit_type = CommandType::kAdd;
+  } else if (itr->second != value) {
+    prev_value = values_[key];
+    edit_type = CommandType::kUpdate;
+  }
+  if (edit_type != CommandType::kUnknown)
+    Executer()->UpdateValue(edit_type, Path(), key, value, prev_value);
 }
 
 void ObjectData::Impl::RemoveKey(const std::string& key) {
@@ -363,8 +382,7 @@ void ObjectData::Impl::RemoveKey(const std::string& key) {
     BOOST_THROW_EXCEPTION(
         ObjectDataException(kErrNoKey)
         << ExpInfo1(Path().String()) << ExpInfo2(key));
-  SetDirty(true);
-  values_.erase(itr);
+  Executer()->UpdateValue(CommandType::kDelete, Path(), key, nil, itr->second);
 }
 
 bool ObjectData::Impl::IsLocal(const std::string& key) const {
@@ -392,6 +410,20 @@ DObjPath ObjectData::Impl::Where(const std::string& key) const {
       base_info_list_, WhereFuncInfo(key, Path(), owner_));
 }
 
+std::vector<std::string> ObjectData::Impl::Keys(bool local_only) const {
+  std::unordered_set<std::string> keys;
+  for (auto& kv : values_)
+    keys.insert(kv.first);
+  if (!local_only)
+    for (auto& base : BaseObjects())
+      for (auto& key : base->Keys(false))
+        keys.insert(key);
+  std::vector<std::string> result;
+  result.reserve(keys.size());
+  std::copy(keys.begin(), keys.end(), std::back_inserter(result));
+  return result;
+}
+
 std::string ObjectData::Impl::Type() const {
   return type_;
 }
@@ -405,7 +437,6 @@ DObjPath ObjectData::Impl::Path() const {
 }
 
 bool ObjectData::Impl::HasChild(const std::string& name) const {
-  RefreshChildrenInBase();
   return std::find_if(
       children_.cbegin(),
       children_.cend(),
@@ -413,7 +444,6 @@ bool ObjectData::Impl::HasChild(const std::string& name) const {
 }
 
 bool ObjectData::Impl::HasLocalChild(const std::string& name) const {
-  RefreshChildrenInBase();
   return std::find_if(
       local_children_.cbegin(),
       local_children_.cend(),
@@ -421,7 +451,6 @@ bool ObjectData::Impl::HasLocalChild(const std::string& name) const {
 }
 
 bool ObjectData::Impl::IsLocalChild(const std::string& name) const {
-  RefreshChildrenInBase();
   auto itr = std::find_if(
       children_.cbegin(),
       children_.cend(),
@@ -434,12 +463,10 @@ bool ObjectData::Impl::IsLocalChild(const std::string& name) const {
 }
 
 std::vector<DObjInfo> ObjectData::Impl::Children() const {
-  RefreshChildrenInBase();
   return children_;
 }
 
 size_t ObjectData::Impl::ChildCount() const {
-  RefreshChildrenInBase();
   return children_.size();
 }
 
@@ -498,7 +525,6 @@ void ObjectData::Impl::UnsetChildFlat(const std::string& name) {
 }
 
 DObjectSp ObjectData::Impl::GetChildObject(size_t index) const {
-  RefreshChildrenInBase();
   if (index > children_.size())
     BOOST_THROW_EXCEPTION(
         ObjectDataException(kErrChildIndexOutOfRange)
@@ -512,7 +538,16 @@ DObjectSp ObjectData::Impl::GetChildObject(const std::string& name) const {
 
 DObjectSp ObjectData::Impl::CreateChild(
     const std::string& name, const std::string& type, bool is_flattened) {
-  return owner_->CreateObject(Path().ChildPath(name), type, is_flattened);
+  if (HasLocalChild(name))
+    BOOST_THROW_EXCEPTION(
+        ObjectDataException(kErrChildDataAlreadyExists)
+        << ExpInfo1(name) << ExpInfo2(Path().String()));
+  return Executer()->UpdateChildList(
+      CommandType::kAdd,Path(), name, type, is_flattened);
+}
+
+DObjectSp ObjectData::Impl::GetObject(const DObjPath& obj_path) {
+  return owner_->GetObject(obj_path);
 }
 
 void ObjectData::Impl::AddChildInfo(const DObjInfo& child_info) {
@@ -526,9 +561,7 @@ void ObjectData::Impl::AddChildInfo(const DObjInfo& child_info) {
                                    return c.Name() == child_info.Name(); }),
                   children_.end());
   children_.emplace_back(child_info);
-  notification_flags_.child_list_updated = true;
   SortDObjInfoVector(children_);
-  Notify();
 }
 
 void ObjectData::Impl::AcquireWriteLock() {
@@ -663,9 +696,12 @@ void ObjectData::Impl::AddBase(const DObjectSp& base) {
     BOOST_THROW_EXCEPTION(
         ObjectDataException(kErrExpiredObjectToBase)
         << ExpInfo1(base->Path().String()) << ExpInfo2(Path().String()));
-  base_info_list_.emplace_back(
-      BaseObjInfo(base->Path(), base));
-  BecomeListner(base, ListenType::kChildListUpdate | ListenType::kValueUpdate);
+
+  auto itr = std::find_if(base_info_list_.cbegin(), base_info_list_.cend(),
+                          [&base](auto b) { return b.path == base->Path(); });
+  if (itr != base_info_list_.cend())
+    return;
+  Executer()->UpdateBaseObjectList(CommandType::kAdd, Path(), base);
 }
 
 std::vector<DObjectSp> ObjectData::Impl::BaseObjects() const {
@@ -678,16 +714,19 @@ std::vector<DObjectSp> ObjectData::Impl::BaseObjects() const {
 
 void ObjectData::Impl::RemoveBase(const DObjectSp& base) {
   auto path = base->Path();
-  auto base_count = base_info_list_.size();
-  if (base_count > 0) {
-    base_info_list_.erase(std::remove_if(
-        base_info_list_.begin(), base_info_list_.end(),
-        [&path](auto& info) { return info.obj->Path() == path; }));
-    if (base_info_list_.size() == base_count)
-      BOOST_THROW_EXCEPTION(
-          ObjectDataException(kErrNotBaseObject)
-          << ExpInfo1(base->Path().String()) << ExpInfo2(Path().String()));
-  }
+  auto itr = std::find_if(
+      base_info_list_.begin(), base_info_list_.end(),
+      [&path](auto& info) { return info.obj->Path() == path; });
+  if (itr == base_info_list_.end())
+    BOOST_THROW_EXCEPTION(
+        ObjectDataException(kErrNotBaseObject)
+        << ExpInfo1(base->Path().String()) << ExpInfo2(Path().String()));
+  Executer()->UpdateBaseObjectList(CommandType::kDelete, Path(), base);
+}
+
+boost::signals2::connection ObjectData::Impl::AddListener(
+    const ListenerFunc& listener) {
+  return sig_.connect(listener);
 }
 
 void ObjectData::Impl::Save() {
@@ -742,6 +781,75 @@ FsPath ObjectData::Impl::LockFilePath() const {
   return path;
 }
 
+void ObjectData::Impl::ExecUpdateValue(const std::string& key,
+                                       const DValue& new_value,
+                                       const DValue& prev_value) {
+  values_[key] = new_value;
+  SetDirty(true);
+  sig_(Command(CommandType::kValueUpdate, Path(),
+               key, new_value, prev_value, DObjPath(), "", {}));
+}
+
+void ObjectData::Impl::ExecRemoveValue(const std::string& key,
+                                       const DValue& prev_value) {
+  values_.erase(key);
+  SetDirty(true);
+  sig_(Command(CommandType::kValueDelete, Path(),
+               key, nil, prev_value, DObjPath(), "", {}));
+}
+
+void ObjectData::Impl::ExecAddValue(const std::string& key,
+                                    const DValue& new_value) {
+  values_[key] = new_value;
+  SetDirty(true);
+  sig_(Command(CommandType::kValueAdd, Path(),
+               key, new_value, nil, DObjPath(), "", {}));
+}
+
+void ObjectData::Impl::ExecRemoveChild(const std::string& name) {
+  auto prev_children = children_;
+  local_children_.erase(
+      std::remove_if(local_children_.begin(), local_children_.end(),
+                     [&name](auto& c) { return c.Name() == name; }),
+      local_children_.end());
+  children_.erase(
+      std::remove_if(children_.begin(), children_.end(),
+                     [&name](auto& c) { return c.Name() == name; }),
+      children_.end());
+  sig_(Command(CommandType::kRemoveChild, Path(),
+               "", nil, nil, Path().ChildPath(name),
+               GetChildObject(name)->Type(),
+               prev_children));
+}
+
+void ObjectData::Impl::ExecAddBase(const DObjectSp& base) {
+  auto prev_children = Children();
+  BaseObjInfo base_info(base->Path(), base);
+  base_info.connections.push_back(
+      base->AddListener(
+          [this](const Command& cmd) { ProcessBaseObjectUpdate(cmd); }));
+
+  base_info_list_.push_back(base_info);
+  RefreshChildrenInBase();
+  sig_(Command(CommandType::kAddBaseObject, Path(),
+               "", nil, nil, base->Path(), "", prev_children));
+}
+
+void ObjectData::Impl::ExecRemoveBase(const DObjectSp& base) {
+  auto prev_children = Children();
+  auto path = base->Path();
+  auto itr = std::remove_if(
+      base_info_list_.begin(), base_info_list_.end(),
+      [&path](auto& info) { return info.obj->Path() == path; });
+  
+  for(auto connection : itr->connections)
+    connection.disconnect();
+  base_info_list_.erase(itr);
+  RefreshChildrenInBase();
+  sig_(Command(CommandType::kRemoveBaseObject, Path(),
+               "", nil, nil, base->Path(), "", prev_children));
+}
+
 bool ObjectData::Impl::CreateEmpty(const FsPath& dir_path) {
   std::ofstream f((dir_path / DataFileName()).string());
   if (!f)
@@ -780,7 +888,6 @@ void ObjectData::Impl::Load() {
 void ObjectData::Impl::RefreshChildren() {
   RefreshLocalChildren();
   RefreshChildrenInBase();
-  Notify();
 }
 
 void ObjectData::Impl::RefreshLocalChildren() {
@@ -822,12 +929,9 @@ void ObjectData::Impl::RefreshLocalChildren() {
   children_.insert(
       children_.begin(), local_children_.begin(), local_children_.end());
   SortDObjInfoVector(children_);
-  notification_flags_.child_list_updated = true;
 }
 
 void ObjectData::Impl::RefreshChildrenInBase() const {
-  if (!need_base_children_update_)
-    return;
   std::unordered_set<std::string> names;
   for (auto& child : local_children_)
     names.insert(child.Name());
@@ -845,44 +949,57 @@ void ObjectData::Impl::RefreshChildrenInBase() const {
       children_.emplace_back(base_child);
     }
   }
-  need_base_children_update_ = false;
+  SortDObjInfoVector(children_);
 }
 
-void ObjectData::Impl::BecomeListner(const DObjectSp& subject, unsigned int flags) {
-  subject->GetData()->impl_->AddListener(ListenerObjInfo(
-      owner_->GetObject(Path()), flags));
-}
-
-void ObjectData::Impl::AddListener(ListenerObjInfo&& listener) {
-  listeners_.emplace_back(listener);
-}
-
-void ObjectData::Impl::Notify() {
-  // clean up listeners;
-  std::unordered_set<DObjPath, DObjPath::Hash> invalid_listeners;
-  for (auto& listener : listeners_)
-    if (listener.obj->IsExpired())
-      invalid_listeners.insert(listener.obj->Path());
-  for (auto& invalid_obj_path : invalid_listeners)
-    listeners_.erase(std::remove_if(
-        listeners_.begin(), listeners_.end(),
-        [&invalid_obj_path] (auto& l) {
-          return l.obj->Path() == invalid_obj_path; }));
-
-  // Notify as needed
-  for (auto& listener : listeners_) {
-    if ((listener.listen_type_flags & ListenType::kChildListUpdate)
-        && (notification_flags_.child_list_updated))
-      listener.obj->GetData()->impl_->SetNeedBaseChildrenUpdate();
+void ObjectData::Impl::ProcessBaseObjectUpdate(const Command& cmd) {
+  const unsigned int cmd_type = static_cast<unsigned int>(cmd.Type());
+  const unsigned int children_update_mask =
+      static_cast<unsigned int>(CommandType::kBaseObjectUpdateType)
+      | static_cast<unsigned int>(CommandType::kChildListUpdateType);
+  auto edit_type = static_cast<unsigned int>(cmd.Type()) & k_edit_type_mask;
+  if (cmd_type & children_update_mask) {
+    auto prev_children = children_;
+    RefreshChildrenInBase();
+    auto next_cmd_type = static_cast<CommandType>(
+        edit_type | (cmd_type & k_command_group_mask));
+    sig_(Command(next_cmd_type, Path(), "", nil, nil,
+                 cmd.ObjPath(), "", prev_children));
+    return;
   }
-  notification_flags_.Clear();
+  if (!IsLocal(cmd.Key()))
+    sig_(Command(cmd.Type(), Path(), cmd.Key(), cmd.NewValue(),
+                 cmd.PrevValue(), DObjPath(), "", {}));
 }
 
-void ObjectData::Impl::SetNeedBaseChildrenUpdate() {
-  need_base_children_update_ = true;
-  for (auto& listener : listeners_)
-    if (listener.listen_type_flags & ListenType::kChildListUpdate)
-      listener.obj->GetData()->impl_->SetNeedBaseChildrenUpdate();
+CommandStackSp ObjectData::Impl::EnableCommandStack(bool enable) {
+  if (enable) {
+    auto stack = GetCommandStack();
+    if (stack)
+      BOOST_THROW_EXCEPTION(
+          ObjectDataException(kErrCommandStackAlreadyEnabled)
+          << ExpInfo1(stack->RootObjPath().String()));
+    command_stack_ = std::shared_ptr<CommandStack>(
+        new CommandStack(owner_, self_));
+  } else {
+    command_stack_ = nullptr;
+  }
+  return command_stack_;
+}
+
+CommandStackSp ObjectData::Impl::GetCommandStack() const {
+  if (command_stack_)
+    return command_stack_;
+  if (parent_)
+    return parent_->GetCommandStack();
+  return nullptr;
+}
+
+CommandExecuterSp ObjectData::Impl::Executer() const {
+  auto executer = GetCommandStack();
+  if (executer)
+    return executer;
+  return default_command_executer_;
 }
 
 ObjectData* ObjectData::Impl::ChildData(const std::string& name,
@@ -962,6 +1079,11 @@ bool ObjectData::IsLocal(const std::string& key) const {
 DObjPath ObjectData::Where(const std::string& key) const {
   return impl_->Where(key);
 }
+
+std::vector<std::string> ObjectData::Keys(bool local_only) const {
+  return impl_->Keys(local_only);
+}
+
 
 std::string ObjectData::Type() const {
   return impl_->Type();
@@ -1073,6 +1195,19 @@ void ObjectData::RemoveBase(const DObjectSp& base) {
   impl_->RemoveBase(base);
 }
 
+boost::signals2::connection ObjectData::AddListener(
+    const ListenerFunc& listener) {
+  return impl_->AddListener(listener);
+}
+
+CommandStackSp ObjectData::EnableCommandStack(bool enable) {
+  return impl_->EnableCommandStack(enable);
+}
+ 
+CommandStackSp ObjectData::GetCommandStack() const {
+  return impl_->GetCommandStack();
+}
+
 void ObjectData::Save() {
   impl_->Save();
 }
@@ -1091,6 +1226,45 @@ FsPath ObjectData::DataFilePath() const {
 
 FsPath ObjectData::LockFilePath() const {
   return impl_->LockFilePath();
+}
+
+void ObjectData::ExecUpdateValue(const std::string& key,
+                                 const DValue& new_value,
+                                 const DValue& prev_value) {
+  impl_->ExecUpdateValue(key, new_value, prev_value);
+}
+
+void ObjectData::ExecRemoveValue(const std::string& key,
+                                 const DValue& prev_value) {
+  impl_->ExecRemoveValue(key, prev_value);
+}
+
+void ObjectData::ExecAddValue(const std::string& key,
+                              const DValue& new_value) {
+  impl_->ExecAddValue(key, new_value);
+}
+
+DObjectSp ObjectData::ExecCreateChild(const std::string& name,
+                                      const std::string& type,
+                                      bool is_flattened) {
+  auto prev_children = Children();
+  auto child_path = Path().ChildPath(name);
+  auto child = impl_->Owner()->CreateObjectImpl(child_path, type, is_flattened);
+  impl_->EmitSignal(Command(CommandType::kAddChild, Path(),
+                            "", nil, nil, child_path, type, prev_children));
+  return child;
+}
+
+void ObjectData::ExecRemoveChild(const std::string& name) {
+  impl_->ExecRemoveChild(name);
+}
+
+void ObjectData::ExecAddBase(const DObjectSp& base) {
+  impl_->ExecAddBase(base);
+}
+
+void ObjectData::ExecRemoveBase(const DObjectSp& base) {
+  impl_->ExecRemoveBase(base);
 }
 
 DataSp ObjectData::Create(const DObjPath& obj_path,
@@ -1121,6 +1295,10 @@ DataSp ObjectData::Open(const DObjPath& obj_path,
       dir_path, obj_path, file_info.Type(), parent, owner));
   data->impl_->Load();
   return data;
+}
+
+ObjectData* ObjectData::GetDataAt(const DObjPath& obj_path) {
+  return impl_->GetObject(obj_path)->GetData();
 }
 
 DObjFileInfo ObjectData::GetFileInfo(const FsPath& path) {

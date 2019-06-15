@@ -59,6 +59,16 @@ extern const int kErrObjectExpired = RegisterErrorCode(
 extern const int kErrObjectIsNotEditable = RegisterErrorCode(
     201, "The object handle '{}' is not editable", 1);
 
+extern const int kErrNoRedoEntry = RegisterErrorCode(
+    250, "The command stack of '{}' doesn't have redo entry", 1);
+extern const int kErrNoUndoEntry = RegisterErrorCode(
+    251, "The command stack of '{}' doesn't have undo entry", 1);
+extern const int kErrTransactionError = RegisterErrorCode(
+    252, "Transaction {}", 1);
+extern const int kErrInvalidCommandTypeError = RegisterErrorCode(
+    253, "Unexpected command type '{}' found in command stack", 1);
+
+
 }  // namespace core
 
 }  // namespace dino

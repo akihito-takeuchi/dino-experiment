@@ -49,8 +49,8 @@ TEST_F(InheritTest, SimpleIneritance) {
   dc::DObjPath path2(boost::join(
       StringVector{kTopName1, kChildName2}, "/"));
   auto top1 = session->CreateTopLevelObject(kTopName1, "test");
-  auto child1 = session->CreateObject(path1, "test");
-  auto child2 = session->CreateObject(path2, "test");
+  auto child1 = top1->CreateChild(kChildName1, "test");
+  auto child2 = top1->CreateChild(kChildName2, "test");
 
   child2->Put("test", 100);
   ASSERT_FALSE(child1->HasKey("test"));
@@ -90,7 +90,7 @@ TEST_F(InheritTest, SimpleIneritance) {
   ASSERT_THROW(child1->Where("test"), dc::DException); 
 }
 
-TEST_F(InheritTest, LoadSaveIneritanced) {
+TEST_F(InheritTest, LoadSaveInerited) {
   dc::DObjPath path1(boost::join(
       StringVector{kTopName2, kChildName1}, "/"));
   dc::DObjPath path2(boost::join(
@@ -99,8 +99,8 @@ TEST_F(InheritTest, LoadSaveIneritanced) {
     auto session = dc::Session::Create(kWspFile);
     auto top = session->CreateTopLevelObject(kTopName2, "test");
     session->InitTopLevelObjectPath(kTopName2, kTopName2);
-    auto child1 = session->CreateObject(path1, "test");
-    auto child2 = session->CreateObject(path2, "test");
+    auto child1 = top->CreateChild(kChildName1, "test");
+    auto child2 = top->CreateChild(kChildName2, "test");
     child1->AddBase(child2);
     child1->Put("test1", 100);
     child2->Put("test1", 200);
@@ -141,8 +141,8 @@ TEST_F(InheritTest, PurgeBase) {
     auto session = dc::Session::Create(kWspFile);
     auto top = session->CreateTopLevelObject(kTopName3, "test");
     session->InitTopLevelObjectPath(kTopName3, kTopName3);
-    auto child1 = session->CreateObject(path1, "test");
-    auto child2 = session->CreateObject(path2, "test");
+    auto child1 = top->CreateChild(kChildName1, "test");
+    auto child2 = top->CreateChild(kChildName2, "test");
     child1->AddBase(child2);
     child1->Put("test1", 100);
     child2->Put("test1", 200);
@@ -190,15 +190,180 @@ TEST_F(InheritTest, InheritedChildren) {
 
   auto session = dc::Session::Create(kWspFile);
   auto top = session->CreateTopLevelObject(kTopName4, "test");
-  auto parent1 = session->CreateObject(path1, "parent");
-  auto parent2 = session->CreateObject(path2, "parent");
-  parent1->AddBase(parent2);
+  auto parent1 = top->CreateChild(kParentName1, "parent");
+  auto parent2 = top->CreateChild(kParentName2, "parent");
 
   parent1->CreateChild(kChildName1, "child");
   parent2->CreateChild(kChildName2, "child");
+  ASSERT_EQ(parent1->Children().size(), 1u);
+  ASSERT_EQ(parent2->Children().size(), 1u);
+
+  parent1->AddBase(parent2);
+  
+  ASSERT_EQ(parent1->Children().size(), 2u);
+  ASSERT_EQ(parent2->Children().size(), 1u);
+  
+  ASSERT_TRUE(parent1->HasChild(kChildName1));
+  ASSERT_TRUE(parent1->HasChild(kChildName2));
+  ASSERT_TRUE(parent1->IsLocalChild(kChildName1));
+  ASSERT_FALSE(parent1->IsLocalChild(kChildName2));
+ 
+  ASSERT_FALSE(parent2->HasChild(kChildName1));
+  ASSERT_TRUE(parent2->HasChild(kChildName2));
+  ASSERT_THROW(parent2->IsLocalChild(kChildName1), dc::DException);
+  ASSERT_TRUE(parent2->IsLocalChild(kChildName2));
+
+  ASSERT_THROW(parent1->IsLocalChild(kChildName3), dc::DException);
+  
+  parent1->CreateChild(kChildName2, "child");
   ASSERT_EQ(parent1->Children().size(), 2u);
   ASSERT_EQ(parent2->Children().size(), 1u);
 
+  ASSERT_TRUE(parent1->HasChild(kChildName1));
+  ASSERT_TRUE(parent1->HasChild(kChildName2));
+  ASSERT_TRUE(parent1->IsLocalChild(kChildName1));
+  ASSERT_TRUE(parent1->IsLocalChild(kChildName2));
+  
+  ASSERT_FALSE(parent2->HasChild(kChildName1));
+  ASSERT_TRUE(parent2->HasChild(kChildName2));
+  ASSERT_THROW(parent2->IsLocalChild(kChildName1), dc::DException);
+  ASSERT_TRUE(parent2->IsLocalChild(kChildName2));
+
+  ASSERT_THROW(parent1->IsLocalChild(kChildName3), dc::DException);
+  
+  parent2->CreateChild(kChildName3, "child");
+  ASSERT_EQ(parent1->Children().size(), 3u);
+  ASSERT_EQ(parent2->Children().size(), 2u);
+
+  ASSERT_TRUE(parent1->HasChild(kChildName1));
+  ASSERT_TRUE(parent1->HasChild(kChildName2));
+  ASSERT_TRUE(parent1->HasChild(kChildName3));
+  ASSERT_TRUE(parent1->IsLocalChild(kChildName1));
+  ASSERT_TRUE(parent1->IsLocalChild(kChildName2));
+  ASSERT_FALSE(parent1->IsLocalChild(kChildName3));
+  
+  ASSERT_FALSE(parent2->HasChild(kChildName1));
+  ASSERT_TRUE(parent2->HasChild(kChildName2));
+  ASSERT_TRUE(parent2->HasChild(kChildName3));
+  ASSERT_THROW(parent2->IsLocalChild(kChildName1), dc::DException);
+  ASSERT_TRUE(parent2->IsLocalChild(kChildName2));
+  ASSERT_TRUE(parent2->IsLocalChild(kChildName3));
+
+  ASSERT_EQ(parent1->Children()[0].Name(), kChildName1);
+  ASSERT_EQ(parent1->Children()[1].Name(), kChildName2);
+  ASSERT_EQ(parent1->Children()[2].Name(), kChildName3);
+
+  ASSERT_EQ(parent2->Children()[0].Name(), kChildName2);
+  ASSERT_EQ(parent2->Children()[1].Name(), kChildName3);
+
+  parent1->RefreshChildren();
+  
+  ASSERT_EQ(parent1->Children()[0].Name(), kChildName1);
+  ASSERT_EQ(parent1->Children()[1].Name(), kChildName2);
+  ASSERT_EQ(parent1->Children()[2].Name(), kChildName3);
+
+  ASSERT_TRUE(parent1->HasChild(kChildName1));
+  ASSERT_TRUE(parent1->HasChild(kChildName2));
+  ASSERT_TRUE(parent1->HasChild(kChildName3));
+  ASSERT_TRUE(parent1->IsLocalChild(kChildName1));
+  ASSERT_TRUE(parent1->IsLocalChild(kChildName2));
+  ASSERT_FALSE(parent1->IsLocalChild(kChildName3));
+}
+
+// Command stack version
+
+class InheritTestWithCommandStack : public ::testing::Test {
+ protected:
+  virtual void SetUp() {
+    if (fs::exists(kWspFile))
+      fs::remove(kWspFile);
+    for (auto dir_name
+             : {kTopName1, kTopName2, kTopName3, kTopName4})
+      if (fs::exists(dir_name))
+        fs::remove_all(dir_name);
+  }
+};
+
+TEST_F(InheritTestWithCommandStack, SimpleIneritance) {
+  auto session = dc::Session::Create();
+  dc::DObjPath path1(boost::join(
+      StringVector{kTopName1, kChildName1}, "/"));
+  dc::DObjPath path2(boost::join(
+      StringVector{kTopName1, kChildName2}, "/"));
+  auto top1 = session->CreateTopLevelObject(kTopName1, "test");
+  top1->EnableCommandStack();
+  auto child1 = top1->CreateChild(kChildName1, "test");
+  auto child2 = top1->CreateChild(kChildName2, "test");
+
+  child2->Put("test", 100);
+  ASSERT_FALSE(child1->HasKey("test"));
+  ASSERT_EQ(child2->Get("test"), 100);
+  ASSERT_EQ(child1->BaseObjects().size(), 0u);
+  ASSERT_EQ(child2->BaseObjects().size(), 0u);
+
+  child1->AddBase(child2);
+  ASSERT_TRUE(child1->HasKey("test"));
+  ASSERT_EQ(child1->Get("test"), 100);
+  ASSERT_EQ(child2->Get("test"), 100);
+  ASSERT_EQ(child1->Where("test"), path2);
+  ASSERT_FALSE(child1->IsLocal("test"));
+  ASSERT_EQ(child1->BaseObjects().size(), 1u);
+  ASSERT_EQ(child1->BaseObjects()[0]->Path(), child2->Path());
+  ASSERT_NE(child1->BaseObjects()[0]->Path(), child1->Path());
+  ASSERT_EQ(child2->BaseObjects().size(), 0u);
+
+  child1->Put("test", 200);
+  ASSERT_TRUE(child1->HasKey("test"));
+  ASSERT_EQ(child1->Get("test"), 200);
+  ASSERT_EQ(child2->Get("test"), 100);
+  ASSERT_EQ(child1->Where("test"), path1);
+  ASSERT_TRUE(child1->IsLocal("test"));
+
+  child1->RemoveBase(child2);
+  ASSERT_TRUE(child1->HasKey("test"));
+  ASSERT_EQ(child1->Get("test"), 200);
+  ASSERT_EQ(child2->Get("test"), 100);
+  ASSERT_EQ(child1->Where("test"), path1);
+  ASSERT_TRUE(child1->IsLocal("test"));
+  ASSERT_EQ(child1->BaseObjects().size(), 0u);
+  ASSERT_EQ(child2->BaseObjects().size(), 0u);
+
+  child1->RemoveKey("test");
+  ASSERT_THROW(child1->Get("test"), dc::DException);
+  ASSERT_THROW(child1->Where("test"), dc::DException);
+}
+
+TEST_F(InheritTestWithCommandStack, InheritedChildren) {
+  dc::DObjPath path1(boost::join(
+      StringVector{kTopName4, kParentName1}, "/"));
+  dc::DObjPath path2(boost::join(
+      StringVector{kTopName4, kParentName2}, "/"));
+  
+  dc::DObjPath path1_1(boost::join(
+      StringVector{kTopName4, kParentName1, kChildName1}, "/"));
+  dc::DObjPath path1_2(boost::join(
+      StringVector{kTopName4, kParentName1, kChildName2}, "/"));
+  dc::DObjPath path2_2(boost::join(
+      StringVector{kTopName4, kParentName2, kChildName2}, "/"));
+  dc::DObjPath path2_3(boost::join(
+      StringVector{kTopName4, kParentName2, kChildName3}, "/"));
+
+  auto session = dc::Session::Create(kWspFile);
+  auto top = session->CreateTopLevelObject(kTopName4, "test");
+  top->EnableCommandStack();
+  auto parent1 = top->CreateChild(kParentName1, "parent");
+  auto parent2 = top->CreateChild(kParentName2, "parent");
+
+  parent1->CreateChild(kChildName1, "child");
+  parent2->CreateChild(kChildName2, "child");
+  ASSERT_EQ(parent1->Children().size(), 1u);
+  ASSERT_EQ(parent2->Children().size(), 1u);
+
+  parent1->AddBase(parent2);
+  
+  ASSERT_EQ(parent1->Children().size(), 2u);
+  ASSERT_EQ(parent2->Children().size(), 1u);
+  
   ASSERT_TRUE(parent1->HasChild(kChildName1));
   ASSERT_TRUE(parent1->HasChild(kChildName2));
   ASSERT_TRUE(parent1->IsLocalChild(kChildName1));
