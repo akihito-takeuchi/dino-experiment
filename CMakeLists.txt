@@ -25,6 +25,7 @@ endif()
 find_package(Boost
   1.67 REQUIRED
   COMPONENTS system filesystem)
+include_directories(${Boost_INCLUDE_DIRS})
 
 # Setup fmtlib
 set(BUILD_SHARED_LIBS true)
@@ -56,7 +57,8 @@ set(with-test true)
 
 # unit tests
 if(with-test)
+  find_package(GTest REQUIRED)
   enable_testing()
-  include_directories("${GTEST_ROOT}/include")
+  include_directories(${GTEST_INCLUDE_DIRS})
   add_subdirectory(tests)
 endif(with-test)
