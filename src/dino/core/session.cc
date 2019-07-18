@@ -559,6 +559,10 @@ DObjectSp Session::GetObject(const DObjPath& obj_path) const {
   return impl_->GetObject(obj_path);
 }
 
+bool Session::IsOpened(const DObjPath& obj_path) const {
+  return impl_->HasObjectData(obj_path);
+}
+
 FsPath Session::WorkspaceFilePath() const {
   return impl_->WorkspaceFilePath();
 }

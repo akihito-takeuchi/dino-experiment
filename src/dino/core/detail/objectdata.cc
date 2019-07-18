@@ -161,6 +161,7 @@ class ObjectData::Impl {
   bool HasChild(const std::string& name) const;
   bool HasLocalChild(const std::string& name) const;
   bool IsLocalChild(const std::string& name) const;
+  bool IsChildOpened(const std::string& name) const;
   std::vector<DObjInfo> Children() const;
   size_t ChildCount() const;
   bool IsFlattened() const;
@@ -169,6 +170,7 @@ class ObjectData::Impl {
   void UnsetChildFlat(const std::string& name);
   DObjectSp GetChildObject(size_t index) const;
   DObjectSp GetChildObject(const std::string& name) const;
+  DObjectSp OpenChildObject(const std::string& name) const;
   DObjectSp CreateChild(const std::string& name,
                         const std::string& type,
                         bool is_flattened);
@@ -462,6 +464,17 @@ bool ObjectData::Impl::IsLocalChild(const std::string& name) const {
   return itr->IsLocal();
 }
 
+bool ObjectData::Impl::IsChildOpened(const std::string& name) const {
+  auto children = Children();
+  auto itr = std::find_if(
+      children.cbegin(),
+      children.cend(),
+      [&](auto& c) { return c.Name() == name; });
+  if (itr == children.cend())
+    return false;
+  return owner_->IsOpened(itr->Path());
+}
+
 std::vector<DObjInfo> ObjectData::Impl::Children() const {
   return children_;
 }
@@ -534,6 +547,10 @@ DObjectSp ObjectData::Impl::GetChildObject(size_t index) const {
 
 DObjectSp ObjectData::Impl::GetChildObject(const std::string& name) const {
   return owner_->GetObject(obj_path_.ChildPath(name));
+}
+
+DObjectSp ObjectData::Impl::OpenChildObject(const std::string& name) const {
+  return owner_->OpenObject(obj_path_.ChildPath(name));
 }
 
 DObjectSp ObjectData::Impl::CreateChild(
@@ -1109,6 +1126,10 @@ bool ObjectData::IsLocalChild(const std::string& name) const {
   return impl_->IsLocalChild(name);
 }
 
+bool ObjectData::IsChildOpened(const std::string& name) const {
+  return impl_->IsChildOpened(name);
+}
+
 std::vector<DObjInfo> ObjectData::Children() const {
   return impl_->Children();
 }
@@ -1139,6 +1160,10 @@ DObjectSp ObjectData::GetChildObject(size_t index) const {
 
 DObjectSp ObjectData::GetChildObject(const std::string& name) const {
   return impl_->GetChildObject(name);
+}
+
+DObjectSp ObjectData::OpenChildObject(const std::string& name) const {
+  return impl_->OpenChildObject(name);
 }
 
 DObjectSp ObjectData::CreateChild(const std::string& name,

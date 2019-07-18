@@ -21,9 +21,13 @@ ObjectFactory::CreateFunc CreateDObject = [](const DataWp& data) {
 
 class ObjectFactory::Impl {
  public:
+  struct ObjectConstructInfo {
+    CreateFunc func;
+    bool is_flattened_object;
+  };
   Impl() = default;
   ~Impl() = default;
-  std::map<std::string, CreateFunc> create_func_map;
+  std::map<std::string, ObjectConstructInfo> object_info_map;
   CreateFunc default_create_func = CreateDObject;
   bool use_default = true;
 };
@@ -35,8 +39,9 @@ ObjectFactory::ObjectFactory()
 ObjectFactory::~ObjectFactory() = default;
 
 bool ObjectFactory::Register(const std::string& type,
-                             const CreateFunc& func) {
-  impl_->create_func_map[type] = func;
+                             const CreateFunc& func,
+                             bool is_flattened_object) {
+  impl_->object_info_map[type] = {func, is_flattened_object};
   return true;
 }
 
@@ -47,14 +52,21 @@ bool ObjectFactory::SetDefaultCreateFunc(const CreateFunc& func) {
 
 DObject* ObjectFactory::Create(const DataWp& data) const {
   auto type = data.lock()->Type();
-  auto itr = impl_->create_func_map.find(type);
-  if (itr != impl_->create_func_map.cend())
-    return itr->second(data);
+  auto itr = impl_->object_info_map.find(type);
+  if (itr != impl_->object_info_map.cend())
+    return itr->second.func(data);
   else if (!impl_->use_default)
     BOOST_THROW_EXCEPTION(
         ObjectFactoryException(kErrObjectTypeNotRegistered)
         << ExpInfo1(type));
   return impl_->default_create_func(data);
+}
+
+bool ObjectFactory::IsFlattenedObject(const std::string& type) const {
+  auto itr = impl_->object_info_map.find(type);
+  if (itr == impl_->object_info_map.cend())
+    return false;
+  return itr->second.is_flattened_object;
 }
 
 void ObjectFactory::EnableDefault() {
@@ -67,7 +79,7 @@ void ObjectFactory::DisableDefault() {
 
 void ObjectFactory::Reset() {
   impl_->use_default = true;
-  impl_->create_func_map.clear();
+  impl_->object_info_map.clear();
   impl_->default_create_func = CreateDObject;
 }
 

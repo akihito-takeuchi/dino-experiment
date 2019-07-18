@@ -22,9 +22,11 @@ class ObjectFactory {
   ObjectFactory& operator=(const ObjectFactory&) = delete;
   ~ObjectFactory();
   bool Register(const std::string& type,
-                const CreateFunc& func);
+                const CreateFunc& func,
+                bool is_flattened_object = false);
   bool SetDefaultCreateFunc(const CreateFunc& func);
   DObject* Create(const DataWp& data) const;
+  bool IsFlattenedObject(const std::string& type) const;
   void EnableDefault();
   void DisableDefault();
   void Reset();

@@ -150,6 +150,10 @@ bool DObject::IsLocalChild(const std::string& name) const {
   return impl_->GetRawData()->IsLocalChild(name);
 }
 
+bool DObject::IsChildOpened(const std::string& name) const {
+  return impl_->GetRawData()->IsChildOpened(name);
+}
+
 std::vector<DObjInfo> DObject::Children() const {
   return impl_->GetRawData()->Children();
 }
@@ -164,6 +168,10 @@ DObjectSp DObject::GetChildObject(size_t index) const {
 
 DObjectSp DObject::GetChildObject(const std::string& name) const {
   return impl_->GetRawData()->GetChildObject(name);
+}
+
+DObjectSp DObject::OpenChildObject(const std::string& name) const {
+  return impl_->GetRawData()->OpenChildObject(name);
 }
 
 DObjectSp DObject::CreateChild(const std::string& name,

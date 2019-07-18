@@ -38,6 +38,7 @@ class Session {
                          bool is_flattened = false);
   DObjectSp OpenObject(const DObjPath& obj_path);
   DObjectSp GetObject(const DObjPath& obj_path) const;
+  bool IsOpened(const DObjPath& obj_path) const;
   FsPath WorkspaceFilePath() const;
   void PurgeObject(const DObjPath& obj_path);
   void Save();
