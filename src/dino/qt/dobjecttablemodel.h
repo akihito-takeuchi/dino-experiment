@@ -23,7 +23,7 @@ class ColumnInfo {
  public:
   using GetDataFuncType =
       std::function<QVariant (const core::DObjectSp&, int)>;
-  using SetValueFuncType =
+  using SetDataFuncType =
       std::function<bool (const core::DObjectSp&, const QVariant&, int)>;
   using GetFlagsFuncType =
       std::function<Qt::ItemFlags (const core::DObjectSp&)>;
@@ -32,16 +32,16 @@ class ColumnInfo {
              const QString& source_name,
              const GetDataFuncType& get_data_func,
              const GetFlagsFuncType& get_flags_func = GetFlagsFuncType(),
-             const SetValueFuncType& set_value_func = SetValueFuncType());
+             const SetDataFuncType& set_data_func = SetDataFuncType());
   QString ColumnName() const;
   SourceTypeConst SourceType() const;
   QString SourceName() const;
   QVariant GetData(const core::DObjectSp& obj,
                     int role = Qt::DisplayRole) const;
   Qt::ItemFlags GetFlags(const core::DObjectSp& obj) const;
-  bool SetValue(const core::DObjectSp& obj,
-                const QVariant& value,
-                int role = Qt::EditRole) const;
+  bool SetData(const core::DObjectSp& obj,
+               const QVariant& value,
+               int role = Qt::EditRole) const;
 
  private:
   QString col_name_;
@@ -49,7 +49,7 @@ class ColumnInfo {
   QString source_name_;
   GetDataFuncType get_data_func_;
   GetFlagsFuncType get_flags_func_;
-  SetValueFuncType set_value_func_;
+  SetDataFuncType set_data_func_;
 };
 
 class DObjectTableModel : public QAbstractTableModel {
