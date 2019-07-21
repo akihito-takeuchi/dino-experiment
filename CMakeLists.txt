@@ -27,6 +27,17 @@ find_package(Boost
   COMPONENTS system filesystem)
 include_directories(${Boost_INCLUDE_DIRS})
 
+set(enable-qt true)
+
+if(enable-qt)
+  set(QTDIR $ENV{QTDIR})
+  set(CMAKE_PREFIX_PATH ${QTDIR})
+  set(CMAKE_AUTOMOC on)
+  set(CMAKE_INCLUDE_CURRENT_DIR on)
+  find_package(Qt5Core REQUIRED)
+  find_package(Qt5Widgets REQUIRED)
+endif(enable-qt)
+
 # Setup fmtlib
 set(BUILD_SHARED_LIBS true)
 set(FMT_ROOT "${CMAKE_CURRENT_LIST_DIR}/third_party/fmt-5.2.1")
@@ -39,18 +50,6 @@ include_directories(${RAPIDJSON_ROOT}/include)
 
 # Dino
 add_subdirectory("src")
-
-set(enable-qt true)
-
-if(enable-qt)
-  set(QTDIR $ENV{QTDIR})
-  set(CMAKE_PREFIX_PATH ${QTDIR})
-  set(CMAKE_AUTOMOC on)
-  set(CMAKE_INCLUDE_CURRENT_DIR on)
-  find_package(Qt5Core REQUIRED)
-  find_package(Qt5Widgets REQUIRED)
-  add_subdirectory("src/dino/qt")
-endif(enable-qt)
 
 # For test
 set(with-test true)

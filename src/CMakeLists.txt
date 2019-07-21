@@ -22,3 +22,13 @@ install(
   TARGETS dino_core
   EXPORT dino_core_export
   DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+if(enable-qt)
+  add_library(dino_qt
+    dino/qt/dobjecttablemodel.cc
+    )
+
+  target_link_libraries(dino_qt dino_core)
+
+  qt5_use_modules(dino_qt Widgets)
+endif(enable-qt)
