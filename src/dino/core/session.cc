@@ -88,7 +88,7 @@ class Session::Impl {
   bool HasTopLevelObject(const std::string& name) const;
   bool HasObjectData(const DObjPath& obj_path) const;
 
-  void ReadWorkspaceFile();
+  void ReadWorkspaceFile(bool add_as_local=true);
   void ReadWorkspaceFile_(
       const FsPath& wsp_file_path, AddPathFuncType add_path_func);
   rj::Document OpenJson(const FsPath& file_path);
@@ -245,10 +245,11 @@ void Session::Impl::CheckWorkspaceFileError(const FsPath& file_path,
         << ExpInfo2("The root of workspace file has to be array."));
 }
 
-void Session::Impl::ReadWorkspaceFile() {
+void Session::Impl::ReadWorkspaceFile(bool add_as_local) {
   ReadWorkspaceFile_(
-      wsp_file_path_, [this](const std::string& name, const FsPath& dir_path) {
-        AddTopLevelObjectPath(name, dir_path, true); });
+      wsp_file_path_,
+      [this, add_as_local](const std::string& name, const FsPath& dir_path) {
+        AddTopLevelObjectPath(name, dir_path, add_as_local); });
 }
 
 void Session::Impl::WorkspaceFileOpenCheck(const std::string& file_path) {
@@ -565,6 +566,17 @@ bool Session::IsOpened(const DObjPath& obj_path) const {
 
 FsPath Session::WorkspaceFilePath() const {
   return impl_->WorkspaceFilePath();
+}
+
+void Session::ImportWorkspaceFile(const std::string& wsp_file_path) {
+  ImportWorkspaceFile(FsPath(wsp_file_path));
+}
+
+void Session::ImportWorkspaceFile(const FsPath& wsp_file_path) {
+  auto wsp_file_path_org = impl_->WorkspaceFilePath();
+  impl_->SetWorkspaceFilePath(wsp_file_path);
+  impl_->ReadWorkspaceFile(false);
+  impl_->SetWorkspaceFilePath(wsp_file_path_org);
 }
 
 void Session::PurgeObject(const DObjPath& obj_path) {
