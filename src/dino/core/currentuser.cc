@@ -92,7 +92,7 @@ bool CurrentUser::IsWritable(const FsPath& path) const {
   FsPath p(path);
   if (!fs::exists(path))
     p = ParentFsPath(path);
-  if (stat(path.string().c_str(), &s) != -1) {
+  if (stat(p.string().c_str(), &s) != -1) {
     if (s.st_mode & S_IWOTH)
       return true;
     if (impl_->uid == s.st_uid
