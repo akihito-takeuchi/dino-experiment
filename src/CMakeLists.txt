@@ -1,6 +1,8 @@
 add_library(dino_core SHARED
   dino/core/dexception.cc
   dino/core/dexception_code.cc
+  dino/core/dobjpath.cc
+  dino/core/dobjinfo.cc
   dino/core/session.cc
   dino/core/dobject.cc
   dino/core/currentuser.cc
