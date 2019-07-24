@@ -106,6 +106,7 @@ class Session::Impl {
                              const std::string& type,
                              bool is_flattened);
   DObjectSp GetObject(const DObjPath& obj_path) const;
+  DObjectSp GetObject(uintptr_t object_id) const;
   void PreNewObjectCheck(const DObjPath& obj_path) const;
   void PreOpenObjectCheck(const DObjPath& obj_path,
                           const FsPath& dir_path = FsPath()) const;
@@ -355,8 +356,12 @@ DObjectSp Session::Impl::CreateTopLevelObject(
   PreNewObjectCheck(DObjPath(name));
   try {
     DObjPath obj_path(name);
+    bool is_flattened = ObjectFactory::Instance().UpdateFlattenedFlag(
+        type, false);
+
     RegisterObjectData(
-        detail::ObjectData::Create(obj_path, type, nullptr, self_, false));
+        detail::ObjectData::Create(obj_path, type, nullptr,
+                                   self_, is_flattened));
     DObjectSp obj(MakeObject(obj_path));
     obj->SetEditable();
     AddTopLevelObjectPath(name, FsPath(), true);
@@ -393,7 +398,13 @@ DObjectSp Session::Impl::CreateObjectImpl(const DObjPath& obj_path,
   if (obj_path.IsTop())
     return CreateTopLevelObject(obj_path.LeafName(), type);
 
+  is_flattened = ObjectFactory::Instance().UpdateFlattenedFlag(
+      type, is_flattened);
+
   auto parent = obj_data_map_[obj_path.ParentPath()].get();
+  if (parent->IsFlattened())
+    is_flattened = true;
+
   RegisterObjectData(
       detail::ObjectData::Create(obj_path, type, parent, self_, is_flattened));
   auto obj = MakeObject(obj_path);
@@ -404,6 +415,21 @@ DObjectSp Session::Impl::CreateObjectImpl(const DObjPath& obj_path,
 DObjectSp Session::Impl::GetObject(const DObjPath& obj_path) const {
   auto obj = MakeObject(obj_path);
   return obj;
+}
+
+DObjectSp Session::Impl::GetObject(uintptr_t object_id) const {
+  detail::DataSp data;
+  for (auto& path_data_pair : obj_data_map_) {
+    if (reinterpret_cast<uintptr_t>(path_data_pair.second.get()) == object_id) {
+      data = path_data_pair.second;
+      break;
+    }
+  }
+  if (!data)
+    BOOST_THROW_EXCEPTION(
+        SessionException(kErrObjectDataNotOpened)
+        << ExpInfo1(fmt::format("OBJ_ID:{}", object_id)));
+  return std::shared_ptr<DObject>(ObjectFactory::Instance().Create(data));
 }
 
 DObjectSp Session::Impl::OpenTopLevelObject(const FsPath& dir_path,
@@ -558,6 +584,10 @@ DObjectSp Session::OpenObject(const DObjPath& obj_path) {
 
 DObjectSp Session::GetObject(const DObjPath& obj_path) const {
   return impl_->GetObject(obj_path);
+}
+
+DObjectSp Session::GetObject(uintptr_t object_id) const {
+  return impl_->GetObject(object_id);
 }
 
 bool Session::IsOpened(const DObjPath& obj_path) const {

@@ -56,6 +56,8 @@ class DObject {
   DObjectSp CreateChild(const std::string& name,
                         const std::string& type,
                         bool is_flattened = false);
+  DObjectSp Parent() const;
+  uintptr_t ObjectID() const;
   void RefreshChildren();
   bool IsFlattened() const;
   bool IsChildFlat(const std::string& name) const;

@@ -180,6 +180,14 @@ DObjectSp DObject::CreateChild(const std::string& name,
   return impl_->GetRawData()->CreateChild(name, type, is_flattened);
 }
 
+DObjectSp DObject::Parent() const {
+  return impl_->GetRawData()->Parent();
+}
+
+uintptr_t DObject::ObjectID() const {
+  return impl_->GetRawData()->ObjectID();
+}
+
 void DObject::RefreshChildren() {
   impl_->GetRawData()->RefreshChildren();
 }

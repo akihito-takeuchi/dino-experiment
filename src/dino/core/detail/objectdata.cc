@@ -14,6 +14,7 @@
 #include "dino/core/dexception.h"
 #include "dino/core/currentuser.h"
 #include "dino/core/commandstack.h"
+#include "dino/core/objectfactory.h"
 #include "dino/core/detail/dataiofactory.h"
 #include "dino/core/detail/objectdataexception.h"
 
@@ -174,6 +175,7 @@ class ObjectData::Impl {
   DObjectSp CreateChild(const std::string& name,
                         const std::string& type,
                         bool is_flattened);
+  DObjectSp Parent() const;
   DObjectSp GetObject(const DObjPath& obj_path);
   void AddChildInfo(const DObjInfo& child_info);
 
@@ -281,6 +283,8 @@ ObjectData::Impl::Impl(ObjectData* self,
     default_command_executer_(new CommandExecuter(owner, self)) {
   if (parent) {
     parent->AddChildInfo(DObjInfo(obj_path, type));
+    if (parent->IsFlattened())
+      is_flattened = true;
     auto parent_dir_path = parent->DirPath();
     if (!is_flattened && !parent_dir_path.empty()) {
       InitDirPath(parent_dir_path / obj_path_.LeafName());
@@ -485,7 +489,7 @@ size_t ObjectData::Impl::ChildCount() const {
 
 bool ObjectData::Impl::IsFlattened() const {
   if (!parent_)
-    return false;
+    return ObjectFactory::Instance().IsFlattenedObject(Type());
   return parent_->IsChildFlat(obj_path_.LeafName());
 }
 
@@ -561,6 +565,12 @@ DObjectSp ObjectData::Impl::CreateChild(
         << ExpInfo1(name) << ExpInfo2(Path().String()));
   return Executer()->UpdateChildList(
       CommandType::kAdd,Path(), name, type, is_flattened);
+}
+
+DObjectSp ObjectData::Impl::Parent() const {
+  if (!parent_)
+    return nullptr;
+  return owner_->GetObject(obj_path_.ParentPath());
 }
 
 DObjectSp ObjectData::Impl::GetObject(const DObjPath& obj_path) {
@@ -657,16 +667,18 @@ bool ObjectData::Impl::InitDirPathImpl(const FsPath& dir_path) {
       return false;
     }
   }
-  for (auto& child_info : local_children_) {
-    if (IsChildFlat(child_info.Name()))
-      continue;
-    auto child = ChildData(child_info.Name(), false);
-    if (!child)
-      continue;
-    if (!child->impl_->InitDirPathImpl(dir_path / child_info.Name())) {
-      data_file_name_.clear();
-      dir_path_.clear();
-      return false;
+  if (!ObjectFactory::Instance().IsFlattenedObject(Type())) {
+    for (auto& child_info : local_children_) {
+      if (IsChildFlat(child_info.Name()))
+        continue;
+      auto child = ChildData(child_info.Name(), false);
+      if (!child)
+        continue;
+      if (!child->impl_->InitDirPathImpl(dir_path / child_info.Name())) {
+        data_file_name_.clear();
+        dir_path_.clear();
+        return false;
+      }
     }
   }
   if (!CreateEmpty(dir_path)) {
@@ -781,7 +793,7 @@ std::string ObjectData::Impl::DataFileName() const {
 }
 
 FsPath ObjectData::Impl::DataFilePath() const {
-  if (IsFlattened())
+  if (parent_ && IsFlattened())
     BOOST_THROW_EXCEPTION(
         ObjectDataException(kErrObjectIsFlattened)
         << ExpInfo1(Path().String()));
@@ -1170,6 +1182,14 @@ DObjectSp ObjectData::CreateChild(const std::string& name,
                                   const std::string& type,
                                   bool is_flattened) {
   return impl_->CreateChild(name, type, is_flattened);
+}
+
+DObjectSp ObjectData::Parent() const {
+  return impl_->Parent();
+}
+
+uintptr_t ObjectData::ObjectID() const {
+  return reinterpret_cast<uintptr_t>(this);
 }
 
 void ObjectData::AddChildInfo(const DObjInfo& child_info) {

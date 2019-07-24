@@ -38,6 +38,7 @@ class Session {
                          bool is_flattened = false);
   DObjectSp OpenObject(const DObjPath& obj_path);
   DObjectSp GetObject(const DObjPath& obj_path) const;
+  DObjectSp GetObject(uintptr_t object_id) const;
   bool IsOpened(const DObjPath& obj_path) const;
   FsPath WorkspaceFilePath() const;
   void ImportWorkspaceFile(const std::string& wsp_file_path);

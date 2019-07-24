@@ -16,17 +16,25 @@ namespace core {
 
 class ObjectFactory {
  public:
+  enum class ObjectFlatTypeConst {
+    kFlattened,
+    kNotFlattened,
+    kSpecifyAtCreation
+  };
   using CreateFunc = std::function<DObject* (const DataWp& data)>;
 
   ObjectFactory(const ObjectFactory&) = delete;
   ObjectFactory& operator=(const ObjectFactory&) = delete;
   ~ObjectFactory();
-  bool Register(const std::string& type,
-                const CreateFunc& func,
-                bool is_flattened_object = false);
+  bool Register(
+      const std::string& type,
+      const CreateFunc& func,
+      ObjectFlatTypeConst flat_type = ObjectFlatTypeConst::kSpecifyAtCreation);
   bool SetDefaultCreateFunc(const CreateFunc& func);
   DObject* Create(const DataWp& data) const;
+  ObjectFlatTypeConst FlatType(const std::string& type) const;
   bool IsFlattenedObject(const std::string& type) const;
+  bool UpdateFlattenedFlag(const std::string& type, bool is_flattened) const;
   void EnableDefault();
   void DisableDefault();
   void Reset();

@@ -23,7 +23,7 @@ class ObjectFactory::Impl {
  public:
   struct ObjectConstructInfo {
     CreateFunc func;
-    bool is_flattened_object;
+    ObjectFlatTypeConst flat_type;
   };
   Impl() = default;
   ~Impl() = default;
@@ -40,8 +40,8 @@ ObjectFactory::~ObjectFactory() = default;
 
 bool ObjectFactory::Register(const std::string& type,
                              const CreateFunc& func,
-                             bool is_flattened_object) {
-  impl_->object_info_map[type] = {func, is_flattened_object};
+                             ObjectFlatTypeConst flat_type) {
+  impl_->object_info_map[type] = {func, flat_type};
   return true;
 }
 
@@ -62,11 +62,32 @@ DObject* ObjectFactory::Create(const DataWp& data) const {
   return impl_->default_create_func(data);
 }
 
-bool ObjectFactory::IsFlattenedObject(const std::string& type) const {
+ObjectFactory::ObjectFlatTypeConst ObjectFactory::FlatType(
+    const std::string& type) const {
   auto itr = impl_->object_info_map.find(type);
   if (itr == impl_->object_info_map.cend())
-    return false;
-  return itr->second.is_flattened_object;
+    return ObjectFlatTypeConst::kSpecifyAtCreation;;;
+  return itr->second.flat_type;
+}
+
+bool ObjectFactory::IsFlattenedObject(const std::string& type) const {
+  return FlatType(type) == ObjectFlatTypeConst::kFlattened;
+}
+
+bool ObjectFactory::UpdateFlattenedFlag(
+    const std::string& type, bool is_flattened) const {
+  auto flat_type = ObjectFactory::FlatType(type);
+  switch (flat_type) {
+    case ObjectFlatTypeConst::kFlattened:
+      is_flattened = true;
+      break;
+    case ObjectFlatTypeConst::kNotFlattened:
+      is_flattened = false;
+      break;
+    case ObjectFlatTypeConst::kSpecifyAtCreation:
+      break;
+  }
+  return is_flattened;
 }
 
 void ObjectFactory::EnableDefault() {
