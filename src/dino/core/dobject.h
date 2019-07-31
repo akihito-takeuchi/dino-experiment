@@ -78,7 +78,7 @@ class DObject {
   void RemoveBase(const DObjectSp& base);
 
   boost::signals2::connection AddListener(
-      const ListenerFunc& listener);
+      const ObjectListenerFunc& listener);
 
   CommandStackSp EnableCommandStack(bool enable = true);
   CommandStackSp GetCommandStack() const;

@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "dino/core/commandexecuter.h"
+#include "dino/core/connection.h"
 
 namespace dino {
 
@@ -27,6 +28,7 @@ class CommandStack : public CommandExecuter {
   void Redo();
   bool CanUndo() const;
   void Undo();
+  void AddListener(const CommandStackListenerFunc& listener);
   
  private:
   CommandStack(Session* session, detail::ObjectData* root_data);
@@ -62,6 +64,7 @@ class CommandStack : public CommandExecuter {
                         const RemovedDataSp& data);
 
   std::deque<std::pair<std::string, std::vector<CommandData>>> stack_;
+  boost::signals2::signal<void()> sig_;
   std::string transaction_description_;
   std::vector<CommandData> transaction_;
   size_t current_pos_ = 0;

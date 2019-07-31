@@ -13,7 +13,8 @@ namespace dino {
 
 namespace core {
 
-using ListenerFunc = std::function<void (const Command&)>;
+using CommandStackListenerFunc = std::function<void ()>;
+using ObjectListenerFunc = std::function<void (const Command&)>;
 
 }  // namespace core
 

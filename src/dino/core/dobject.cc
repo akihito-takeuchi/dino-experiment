@@ -256,7 +256,7 @@ void DObject::RemoveBase(const DObjectSp& base) {
 }
 
 boost::signals2::connection DObject::AddListener(
-    const ListenerFunc& listener) {
+    const ObjectListenerFunc& listener) {
   return impl_->GetRawData()->AddListener(listener);
 }
 

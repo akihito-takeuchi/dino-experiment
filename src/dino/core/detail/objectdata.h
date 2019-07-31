@@ -84,7 +84,7 @@ class ObjectData {
   void RemoveBase(const DObjectSp& base);
 
   boost::signals2::connection AddListener(
-      const ListenerFunc& listener);
+      const ObjectListenerFunc& listener);
 
   CommandStackSp EnableCommandStack(bool enable);
   CommandStackSp GetCommandStack() const;

@@ -66,7 +66,7 @@ ObjectFactory::ObjectFlatTypeConst ObjectFactory::FlatType(
     const std::string& type) const {
   auto itr = impl_->object_info_map.find(type);
   if (itr == impl_->object_info_map.cend())
-    return ObjectFlatTypeConst::kSpecifyAtCreation;;;
+    return ObjectFlatTypeConst::kSpecifyAtCreation;
   return itr->second.flat_type;
 }
 

@@ -56,10 +56,12 @@ void CommandStack::CancelTransaction() {
 void CommandStack::Clear() {
   stack_.clear();
   current_pos_ = clean_pos_ = 0;
+  sig_();
 }
 
 void CommandStack::Clean() {
   clean_pos_ = current_pos_;
+  sig_();
 }
 
 bool CommandStack::IsClean() const {
@@ -67,7 +69,7 @@ bool CommandStack::IsClean() const {
 }
 
 bool CommandStack::CanRedo() const {
-  return current_pos_ < stack_.size();
+  return current_pos_ < (stack_.size() - 1);
 }
 
 void CommandStack::Redo() {
@@ -78,6 +80,7 @@ void CommandStack::Redo() {
   for (auto& cmd : stack_[current_pos_].second)
     ExecRedo(cmd);
   current_pos_ ++;
+  sig_();
 }
 
 bool CommandStack::CanUndo() const {
@@ -92,6 +95,11 @@ void CommandStack::Undo() {
   for (auto& cmd : stack_[current_pos_-1].second)
     ExecUndo(cmd);
   current_pos_ --;
+  sig_();
+}
+
+void CommandStack::AddListener(const CommandStackListenerFunc& listener) {
+  sig_.connect(listener);
 }
 
 void CommandStack::PushCommand(const Command& cmd) {

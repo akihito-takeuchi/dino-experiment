@@ -193,13 +193,14 @@ class ObjectData::Impl {
   void RemoveBase(const DObjectSp& base);
 
   boost::signals2::connection AddListener(
-      const ListenerFunc& listener);
+      const ObjectListenerFunc& listener);
 
   void Load();
   void Save();
   void RefreshChildren();
 
   CommandStackSp EnableCommandStack(bool enable);
+  ObjectData* FindObjWithCommandStackInHier() const;
   CommandStackSp GetCommandStack() const;
   CommandExecuterSp Executer() const;
 
@@ -229,7 +230,7 @@ class ObjectData::Impl {
   void ExecRemoveBase(const DObjectSp& base);
 
   Session* Owner() const { return owner_; }
-  void EmitSignal(const Command& cmd) { sig_(cmd); }
+  void EmitSignal(const Command& cmd);
 
  private:
   void Save(const std::unique_ptr<DataIO>& data_io);
@@ -754,7 +755,7 @@ void ObjectData::Impl::RemoveBase(const DObjectSp& base) {
 }
 
 boost::signals2::connection ObjectData::Impl::AddListener(
-    const ListenerFunc& listener) {
+    const ObjectListenerFunc& listener) {
   return sig_.connect(listener);
 }
 
@@ -877,6 +878,13 @@ void ObjectData::Impl::ExecRemoveBase(const DObjectSp& base) {
   RefreshChildrenInBase();
   sig_(Command(CommandType::kRemoveBaseObject, Path(),
                "", nil, nil, base->Path(), "", prev_children));
+}
+
+void ObjectData::Impl::EmitSignal(const Command& cmd) {
+  sig_(cmd);
+  auto cmd_stack_obj = FindObjWithCommandStackInHier();
+  if (cmd_stack_obj && cmd_stack_obj != self_)
+    cmd_stack_obj->impl_->EmitSignal(cmd);
 }
 
 bool ObjectData::Impl::CreateEmpty(const FsPath& dir_path) {
@@ -1016,11 +1024,18 @@ CommandStackSp ObjectData::Impl::EnableCommandStack(bool enable) {
   return command_stack_;
 }
 
-CommandStackSp ObjectData::Impl::GetCommandStack() const {
+ObjectData* ObjectData::Impl::FindObjWithCommandStackInHier() const {
   if (command_stack_)
-    return command_stack_;
+    return self_;
   if (parent_)
-    return parent_->GetCommandStack();
+    return parent_->impl_->FindObjWithCommandStackInHier();
+  return nullptr;
+}
+
+CommandStackSp ObjectData::Impl::GetCommandStack() const {
+  auto target_obj = FindObjWithCommandStackInHier();
+  if (target_obj)
+    return target_obj->impl_->command_stack_;
   return nullptr;
 }
 
@@ -1241,7 +1256,7 @@ void ObjectData::RemoveBase(const DObjectSp& base) {
 }
 
 boost::signals2::connection ObjectData::AddListener(
-    const ListenerFunc& listener) {
+    const ObjectListenerFunc& listener) {
   return impl_->AddListener(listener);
 }
 
