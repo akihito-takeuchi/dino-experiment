@@ -114,7 +114,8 @@ class Session::Impl {
   DObjectSp OpenTopLevelObject(const FsPath& dir_path,
                                const std::string& name);
   DObjectSp OpenObject(const DObjPath& obj_path);
-  void PurgeObject(const DObjPath& obj_path);
+  void DeleteObjectImpl(const DObjPath& obj_path);
+  void PurgeObject(const DObjPath& obj_path, bool check_existence = true);
   void RegisterObjectData(const detail::DataSp& data);
   bool HasError();
   std::string ErrorMessage() const;
@@ -484,6 +485,29 @@ DObjectSp Session::Impl::OpenObject(const DObjPath& obj_path) {
   }
 }
 
+void Session::Impl::DeleteObjectImpl(const DObjPath& obj_path) {
+  FsPath dir_to_remove;
+  auto target_name = obj_path.LeafName();
+  if (!obj_path.IsTop()) {
+    auto parent_path = obj_path.ParentPath();
+    auto parent = GetObject(parent_path);
+    parent->SetEditable();
+    if (!parent->IsChildFlat(target_name) && !parent->DirPath().empty())
+      dir_to_remove = parent->DirPath() / target_name;
+  } else {
+    auto path_info = FindTopObjPathInfo(target_name);
+    if (path_info)
+      dir_to_remove = path_info->path;
+  }
+  if (!dir_to_remove.empty()) {
+    try {
+      fs::remove_all(dir_to_remove);
+    } catch (const fs::filesystem_error&) {
+    }
+  }
+  PurgeObject(obj_path, false);
+}
+
 DObjectSp Session::Impl::MakeObject(const DObjPath& obj_path) const {
   if (!HasObjectData(obj_path))
     BOOST_THROW_EXCEPTION(
@@ -493,16 +517,17 @@ DObjectSp Session::Impl::MakeObject(const DObjPath& obj_path) const {
   return std::shared_ptr<DObject>(ObjectFactory::Instance().Create(data));
 }
 
-void Session::Impl::PurgeObject(const DObjPath& obj_path) {
-  if (!HasObjectData(obj_path))
-    BOOST_THROW_EXCEPTION(
-        SessionException(kErrObjectDataNotOpened)
-        << ExpInfo1(obj_path.String()));
-
-  for (auto& child : obj_data_map_[obj_path]->Children())
-    PurgeObject(obj_path.ChildPath(child.Name()));
-
-  obj_data_map_.erase(obj_path);
+void Session::Impl::PurgeObject(const DObjPath& obj_path, bool check_existence) {
+  if (!HasObjectData(obj_path)) {
+    if (check_existence)
+      BOOST_THROW_EXCEPTION(
+          SessionException(kErrObjectDataNotOpened)
+          << ExpInfo1(obj_path.String()));
+  } else {
+    for (auto& child : obj_data_map_[obj_path]->Children())
+      PurgeObject(obj_path.ChildPath(child.Name()), check_existence);
+    obj_data_map_.erase(obj_path);
+  }
   if (obj_path.IsTop())
     RemoveTopLevelObjectPath(obj_path.TopName());
 }
@@ -594,6 +619,20 @@ bool Session::IsOpened(const DObjPath& obj_path) const {
   return impl_->HasObjectData(obj_path);
 }
 
+void Session::DeleteObject(const DObjPath& obj_path) {
+  if (obj_path.IsTop()) {
+    DeleteObjectImpl(obj_path);
+    return;
+  }
+
+  auto parent = GetObject(obj_path.ParentPath());
+  parent->DeleteChild(obj_path.LeafName());
+}
+
+void Session::DeleteObjectImpl(const DObjPath& obj_path) {
+  impl_->DeleteObjectImpl(obj_path);
+}
+
 FsPath Session::WorkspaceFilePath() const {
   return impl_->WorkspaceFilePath();
 }
@@ -618,7 +657,7 @@ void Session::Save() {
 }
 
 bool Session::HasError() {
-  return !impl_->HasError();
+  return impl_->HasError();
 }
 
 std::string Session::ErrorMessage() const {

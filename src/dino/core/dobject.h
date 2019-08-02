@@ -63,6 +63,7 @@ class DObject {
   bool IsChildFlat(const std::string& name) const;
   void SetChildFlat(const std::string& name);
   void UnsetChildFlat(const std::string& name);
+  void DeleteChild(const std::string& name);
 
   bool IsEditable() const;
   bool IsReadOnly() const;
@@ -78,7 +79,7 @@ class DObject {
   void RemoveBase(const DObjectSp& base);
 
   boost::signals2::connection AddListener(
-      const ObjectListenerFunc& listener);
+      const ObjectListenerFunc& listener, ListenerCallPoint call_point);
 
   CommandStackSp EnableCommandStack(bool enable = true);
   CommandStackSp GetCommandStack() const;

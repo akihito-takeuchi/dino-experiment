@@ -40,6 +40,7 @@ class Session {
   DObjectSp GetObject(const DObjPath& obj_path) const;
   DObjectSp GetObject(uintptr_t object_id) const;
   bool IsOpened(const DObjPath& obj_path) const;
+  void DeleteObject(const DObjPath& obj_path);
   FsPath WorkspaceFilePath() const;
   void ImportWorkspaceFile(const std::string& wsp_file_path);
   void ImportWorkspaceFile(const FsPath& wsp_file_path);
@@ -59,6 +60,7 @@ class Session {
   DObjectSp CreateObjectImpl(const DObjPath& obj_info,
                              const std::string& type,
                              bool is_flattened = false);
+  void DeleteObjectImpl(const DObjPath& obj_path);
   void RegisterObjectData(const std::shared_ptr<detail::ObjectData>& data);
 
   class Impl;

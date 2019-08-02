@@ -13,6 +13,12 @@ namespace dino {
 
 namespace core {
 
+enum class ListenerCallPoint {
+  kPre,
+  kPost,
+  kNumCallPoint
+};
+
 using CommandStackListenerFunc = std::function<void ()>;
 using ObjectListenerFunc = std::function<void (const Command&)>;
 

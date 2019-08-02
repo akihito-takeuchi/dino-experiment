@@ -63,8 +63,8 @@ extern const int kErrNoRedoEntry = RegisterErrorCode(
     250, "The command stack of '{}' doesn't have redo entry", 1);
 extern const int kErrNoUndoEntry = RegisterErrorCode(
     251, "The command stack of '{}' doesn't have undo entry", 1);
-extern const int kErrTransactionError = RegisterErrorCode(
-    252, "Transaction {}", 1);
+extern const int kErrBatchCommandError = RegisterErrorCode(
+    252, "Batch command {}", 1);
 extern const int kErrInvalidCommandTypeError = RegisterErrorCode(
     253, "Unexpected command type '{}' found in command stack", 1);
 

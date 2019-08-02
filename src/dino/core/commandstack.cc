@@ -2,6 +2,9 @@
 // Distributed under the MIT License : http://opensource.org/licenses/MIT
 
 #include "dino/core/commandstack.h"
+
+#include <boost/range/adaptor/reversed.hpp>
+
 #include "dino/core/commandstackexception.h"
 #include "dino/core/session.h"
 #include "dino/core/dobject.h"
@@ -25,32 +28,35 @@ CommandStack::CommandStack(Session* session, detail::ObjectData* root_data)
     : CommandExecuter(session, root_data) {
 }
 
-void CommandStack::StartTransaction(const std::string& description) {
-  if (in_transaction_)
+void CommandStack::StartBatch(const std::string& description) {
+  if (in_batch_)
     BOOST_THROW_EXCEPTION(
-        CommandStackException(kErrTransactionError)
+        CommandStackException(kErrBatchCommandError)
         << ExpInfo1("has already started"));
-  transaction_description_ = description;
-  transaction_.clear();
-  in_transaction_ = true;
+  batch_description_ = description;
+  batch_.clear();
+  in_batch_ = true;
 }
 
-void CommandStack::EndTransaction() {
-  if (!in_transaction_)
+void CommandStack::EndBatch() {
+  if (!in_batch_)
     BOOST_THROW_EXCEPTION(
-        CommandStackException(kErrTransactionError)
+        CommandStackException(kErrBatchCommandError)
         << ExpInfo1("has not started"));
-  stack_.emplace_back(transaction_description_, transaction_);
-  in_transaction_ = false;
-  Redo();
+  PushBatchCommand(batch_description_, batch_);
+  in_batch_ = false;
 }
 
-void CommandStack::CancelTransaction() {
-  if (!in_transaction_)
+void CommandStack::CancelBatch() {
+  if (!in_batch_)
     BOOST_THROW_EXCEPTION(
-        CommandStackException(kErrTransactionError)
+        CommandStackException(kErrBatchCommandError)
         << ExpInfo1("has not started"));
-  in_transaction_ = false;
+  // put each command in batch as single command to stack
+  for (auto& command_data : batch_)
+    PushBatchCommand("", {command_data}, false);
+  in_batch_ = false;
+  sig_();
 }
 
 void CommandStack::Clear() {
@@ -69,7 +75,7 @@ bool CommandStack::IsClean() const {
 }
 
 bool CommandStack::CanRedo() const {
-  return current_pos_ < (stack_.size() - 1);
+  return current_pos_ < stack_.size();
 }
 
 void CommandStack::Redo() {
@@ -92,7 +98,7 @@ void CommandStack::Undo() {
     BOOST_THROW_EXCEPTION(
         CommandStackException(kErrNoUndoEntry)
         << ExpInfo1(RootObjPath().String()));
-  for (auto& cmd : stack_[current_pos_-1].second)
+  for (auto& cmd : stack_[current_pos_-1].second | boost::adaptors::reversed)
     ExecUndo(cmd);
   current_pos_ --;
   sig_();
@@ -104,12 +110,21 @@ void CommandStack::AddListener(const CommandStackListenerFunc& listener) {
 
 void CommandStack::PushCommand(const Command& cmd) {
   CommandData cmd_data(cmd, nullptr);
-  if (in_transaction_) {
-    transaction_.push_back(cmd_data);
-  } else {
-    stack_.emplace_back("", std::vector<CommandData>({cmd_data}));
-    Redo();
-  }
+  ExecRedo(cmd_data);
+  if (in_batch_)
+    batch_.push_back(cmd_data);
+  else
+    PushBatchCommand("", {cmd_data});
+}
+
+void CommandStack::PushBatchCommand(const std::string& description,
+                                    const BatchCommandData& batch_data,
+                                    bool emit_signal) {
+  stack_.resize(current_pos_);
+  stack_.emplace_back(description, batch_data);
+  current_pos_ ++;
+  if (emit_signal)
+    sig_();
 }
 
 void CommandStack::UpdateValue(CommandType type,
@@ -149,13 +164,8 @@ DObjectSp CommandStack::UpdateChildList(CommandType type,
   Command cmd(cmd_type, path, "", nil, nil, child_name, obj_type,
               session_->GetObject(path)->Children());
   PushCommand(cmd);
-  DObjectSp child;
-  auto edit_type = static_cast<CommandType>(
-      static_cast<int>(type) & static_cast<int>(CommandType::kEditTypeMask));
-  if (!in_transaction_ && edit_type == CommandType::kAdd) {
-    child = session_->GetObject(path.ChildPath(child_name));
-    child->SetEditable();
-  }
+  DObjectSp child = session_->GetObject(path.ChildPath(child_name));
+  child->SetEditable();
   return child;
 }
 
@@ -188,12 +198,12 @@ void CommandStack::ExecRedo(CommandData& cmd_data) {
                            cmd.TargetObjectType(),
                            true);
       break;
-    case CommandType::kRemoveChild:
+    case CommandType::kDeleteChild:
       if (!cmd_data.second) {
         cmd_data.second = std::make_shared<RemovedData>();
         StoreChildData(obj, cmd.TargetObjectName(), cmd_data.second);
       }
-      obj->ExecRemoveChild(cmd.TargetObjectName());
+      obj->ExecDeleteChild(cmd.TargetObjectName());
       break;
     default:
       BOOST_THROW_EXCEPTION(
@@ -224,9 +234,9 @@ void CommandStack::ExecUndo(CommandData& cmd_data) {
       break;
     case CommandType::kAddChild:
     case CommandType::kAddFlattenedChild:
-      obj->ExecRemoveChild(cmd.TargetObjectName());
+      obj->ExecDeleteChild(cmd.TargetObjectName());
       break;
-    case CommandType::kRemoveChild:
+    case CommandType::kDeleteChild:
       RestoreChildData(obj, cmd_data.second);
       break;
     default:

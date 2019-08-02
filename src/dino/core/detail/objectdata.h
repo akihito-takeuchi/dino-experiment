@@ -69,6 +69,7 @@ class ObjectData {
   uintptr_t ObjectID() const;
   void RemoveChild(const std::string& name);
   void AddChildInfo(const DObjInfo& child_info);
+  void DeleteChild(const std::string& name);
 
   void AcquireWriteLock();
   void ReleaseWriteLock();
@@ -84,7 +85,7 @@ class ObjectData {
   void RemoveBase(const DObjectSp& base);
 
   boost::signals2::connection AddListener(
-      const ObjectListenerFunc& listener);
+      const ObjectListenerFunc& listener, ListenerCallPoint call_point);
 
   CommandStackSp EnableCommandStack(bool enable);
   CommandStackSp GetCommandStack() const;
@@ -122,7 +123,7 @@ class ObjectData {
   DObjectSp ExecCreateChild(const std::string& name,
                             const std::string& type,
                             bool is_flattened);
-  void ExecRemoveChild(const std::string& name);
+  void ExecDeleteChild(const std::string& name);
   void ExecAddBase(const DObjectSp& base);
   void ExecRemoveBase(const DObjectSp& base);
 

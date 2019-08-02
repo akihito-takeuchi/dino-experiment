@@ -18,9 +18,9 @@ namespace core {
 class CommandStack : public CommandExecuter {
  public:
   ~CommandStack() = default;
-  void StartTransaction(const std::string& description);
-  void EndTransaction();
-  void CancelTransaction();
+  void StartBatch(const std::string& description);
+  void EndBatch();
+  void CancelBatch();
   void Clear();
   void Clean();
   bool IsClean() const;
@@ -53,6 +53,7 @@ class CommandStack : public CommandExecuter {
   struct RemovedData;
   using RemovedDataSp = std::shared_ptr<RemovedData>;
   using CommandData = std::pair<Command, RemovedDataSp>;
+  using BatchCommandData = std::vector<CommandData>;
 
   void PushCommand(const Command& cmd);
   void ExecRedo(CommandData& cmd_data);
@@ -62,14 +63,17 @@ class CommandStack : public CommandExecuter {
                       const RemovedDataSp& data);
   void RestoreChildData(detail::ObjectData* obj,
                         const RemovedDataSp& data);
+  void PushBatchCommand(const std::string& description,
+                        const BatchCommandData& batch_data,
+                        bool emit_signal = true);
 
-  std::deque<std::pair<std::string, std::vector<CommandData>>> stack_;
+  std::deque<std::pair<std::string, BatchCommandData>> stack_;
   boost::signals2::signal<void()> sig_;
-  std::string transaction_description_;
-  std::vector<CommandData> transaction_;
+  std::string batch_description_;
+  BatchCommandData batch_;
   size_t current_pos_ = 0;
   size_t clean_pos_ = 0;
-  bool in_transaction_ = false;
+  bool in_batch_ = false;
   friend class DObject;
   friend class detail::ObjectData;
 };

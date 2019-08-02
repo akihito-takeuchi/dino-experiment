@@ -208,6 +208,11 @@ void DObject::UnsetChildFlat(const std::string& name) {
   impl_->GetRawData()->UnsetChildFlat(name);
 }
 
+void DObject::DeleteChild(const std::string& name) {
+  impl_->RequireEditable();
+  impl_->GetRawData()->DeleteChild(name);
+}
+
 bool DObject::IsEditable() const {
   return impl_->IsEditable();
 }
@@ -256,8 +261,8 @@ void DObject::RemoveBase(const DObjectSp& base) {
 }
 
 boost::signals2::connection DObject::AddListener(
-    const ObjectListenerFunc& listener) {
-  return impl_->GetRawData()->AddListener(listener);
+    const ObjectListenerFunc& listener, ListenerCallPoint call_point) {
+  return impl_->GetRawData()->AddListener(listener, call_point);
 }
 
 CommandStackSp DObject::EnableCommandStack(bool enable) {

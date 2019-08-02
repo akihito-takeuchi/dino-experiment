@@ -79,7 +79,7 @@ extern const int kErrObjectIsNotEditable;
 extern const int kErrInvalidObjectString;
 extern const int kErrNoRedoEntry;
 extern const int kErrNoUndoEntry;
-extern const int kErrTransactionError;
+extern const int kErrBatchCommandError;
 extern const int kErrInvalidCommandTypeError;
 
 }  // namespace core

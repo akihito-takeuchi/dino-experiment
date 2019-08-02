@@ -52,7 +52,7 @@ DObjectSp CommandExecuter::UpdateChildList(CommandType type,
   if (edit_type == CommandType::kAdd) {
     child = root_data_->ExecCreateChild(child_name, obj_type, is_flattened);
   } else if (edit_type == CommandType::kDelete) {
-    root_data_->ExecRemoveChild(child_name);
+    root_data_->ExecDeleteChild(child_name);
   }
   return child;
 }

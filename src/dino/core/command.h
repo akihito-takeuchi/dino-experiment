@@ -5,6 +5,7 @@
 
 #include <vector>
 #include <string>
+#include <fmt/format.h>
 
 #include "dino/core/fwd.h"
 #include "dino/core/dobjinfo.h"
@@ -33,12 +34,35 @@ enum class CommandType {
 
   kAddChild             = 0b00010001,
   kAddFlattenedChild    = 0b00010101,
-  kRemoveChild          = 0b00010011,
+  kDeleteChild          = 0b00010011,
   kChildListUpdateType  = 0b00010000
 };
 
+inline std::string CommandTypeToString(CommandType type) {
+  std::string result;
+  switch (type) {
+    case CommandType::kAdd:               result = "Add";               break;
+    case CommandType::kUpdate:            result = "Update";            break;
+    case CommandType::kDelete:            result = "Delete";            break;
+    case CommandType::kUnknown:           result = "Unknown";           break;
+    case CommandType::kValueAdd:          result = "ValueAdd";          break;
+    case CommandType::kValueUpdate:       result = "ValueUpdate";       break;
+    case CommandType::kValueDelete:       result = "ValueDelete";       break;
+    case CommandType::kAddBaseObject:     result = "AddBaseObject";     break;
+    case CommandType::kRemoveBaseObject:  result = "RemoveBaseObject";  break;
+    case CommandType::kAddChild:          result = "AddChild";          break;
+    case CommandType::kAddFlattenedChild: result = "AddFlattenedChild"; break;
+    case CommandType::kDeleteChild:       result = "DeleteChild";       break;
+    default:
+      result = fmt::format("UnknownCommandType({0})", static_cast<int>(type));
+  }
+  return result;
+}
+
 class Command {
  public:
+  Command() = default;
+  Command(const Command&) = default;
   Command(CommandType type,
           const DObjPath& path,
           const std::string& key,

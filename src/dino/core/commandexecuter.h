@@ -23,6 +23,7 @@ class CommandExecuter {
  public:
   virtual ~CommandExecuter() = default;
   DObjPath RootObjPath() const;
+ protected:
   // Create command
   virtual void UpdateValue(
       CommandType type,
@@ -40,7 +41,6 @@ class CommandExecuter {
       const std::string& child_name,
       const std::string& obj_type,
       bool is_flattened);
- protected:
   CommandExecuter(Session* session, detail::ObjectData* root_data);
 
   Session* session_;
