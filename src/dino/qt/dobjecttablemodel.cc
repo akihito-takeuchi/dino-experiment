@@ -5,62 +5,108 @@
 
 #include <QList>
 
+#include "dino/core/session.h"
 #include "dino/core/dobject.h"
 
 namespace dino {
 
 namespace qt {
 
-ColumnInfo::ColumnInfo(
-    const QString& col_name,
-    SourceTypeConst source_type,
-    const QString& source_name,
-    const GetDataFuncType& get_data_func,
-    const GetFlagsFuncType& get_flags_func,
-    const SetDataFuncType& set_data_func)
-    : col_name_(col_name), source_type_(source_type),
-      source_name_(source_name),
-      get_data_func_(get_data_func),
-      get_flags_func_(get_flags_func),
-      set_data_func_(set_data_func) {
-}
-
-QString ColumnInfo::ColumnName() const {
-  return col_name_;
-}
-
-SourceTypeConst ColumnInfo::SourceType() const {
-  return source_type_;
-}
-
-QString ColumnInfo::SourceName() const {
-  return source_name_;
-}
-
-QVariant ColumnInfo::GetData(const core::DObjectSp& obj, int role) const {
-  return get_data_func_(obj, role);
-}
-
-Qt::ItemFlags ColumnInfo::GetFlags(const core::DObjectSp& obj) const {
-  return get_flags_func_(obj);
-}
-
-bool ColumnInfo::SetData(
-    const core::DObjectSp& obj, const QVariant& value, int role) const {
-  return set_data_func_(obj, value, role);
-}
-
 class DObjectTableModel::Impl {
  public:
-  Impl() = default;
+  Impl(DObjectTableModel* self) : self(self) {}
   ~Impl() = default;
+  void PreUpdate(const dino::core::Command& cmd) {
+    auto session = root_obj->GetSession();
+    auto obj = session->GetObject(cmd.ObjPath());
+    switch (cmd.Type()) {
+      case core::CommandType::kAddBaseObject:
+      case core::CommandType::kRemoveBaseObject:
+        self->beginResetModel();
+        break;
+      case core::CommandType::kAddChild:
+      case core::CommandType::kAddFlattenedChild: {
+        auto child_name = cmd.TargetObjectName();
+        auto children = obj->Children();
+        auto index = self->ObjectToIndex(obj);
+        auto row = std::distance(
+            children.cbegin(),
+            std::find_if(
+                children.cbegin(), children.cend(),
+                [child_name](auto& obj_info) {
+                  return obj_info.Name() < child_name;}));
+        self->beginInsertRows(index, row, row);
+        break;
+      }
+      case core::CommandType::kDeleteChild: {
+        auto child_name = cmd.TargetObjectName();
+        auto children = cmd.PrevChildren();
+        auto index = self->ObjectToIndex(obj);
+        auto row = std::distance(
+            children.cbegin(),
+            std::find_if(
+                children.cbegin(), children.cend(),
+                [child_name](auto& obj) { return obj.Name() == child_name; }));
+        self->beginRemoveRows(index, row, row);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  void PostUpdate(const dino::core::Command& cmd) {
+    auto session = root_obj->GetSession();
+    auto obj = session->GetObject(cmd.ObjPath());
+    switch (cmd.Type()) {
+      case core::CommandType::kValueAdd:
+      case core::CommandType::kValueUpdate:
+      case core::CommandType::kValueDelete: {
+        auto col = KeyToCol(cmd.Key());
+        auto index = self->ObjectToIndex(obj);
+        if (col < self->columnCount(index))
+          emit self->dataChanged(index.sibling(index.row(), col),
+                                 index.sibling(index.row(), col));
+        break;
+      }
+      case core::CommandType::kAddBaseObject:
+      case core::CommandType::kRemoveBaseObject:
+        self->endResetModel();
+        break;
+      case core::CommandType::kAddChild:
+      case core::CommandType::kAddFlattenedChild:
+        self->endInsertRows();
+        break;
+      case core::CommandType::kDeleteChild:
+        self->endRemoveRows();
+        break;
+      default:
+        break;
+    }
+  }
+  int KeyToCol(const std::string& key_) {
+    auto key = QString::fromStdString(key_);
+    int col = 0;
+    for (auto& col_info : col_info_list) {
+      if (col_info.SourceName() == key)
+        return col;
+      col ++;
+    }
+    return col;
+  }
   core::DObjectSp root_obj;
   QList<ColumnInfo> col_info_list;
+  DObjectTableModel* self;
 };
 
 DObjectTableModel::DObjectTableModel(const core::DObjectSp& root_obj, QObject* parent)
-    : QAbstractTableModel(parent), impl_(std::make_unique<Impl>()) {
+    : QAbstractTableModel(parent), impl_(std::make_unique<Impl>(this)) {
   impl_->root_obj = root_obj;
+  impl_->root_obj->AddListener([this](auto& cmd) {
+      this->impl_->PreUpdate(cmd);
+    }, dino::core::ListenerCallPoint::kPre);
+  impl_->root_obj->AddListener([this](auto& cmd) {
+      this->impl_->PostUpdate(cmd);
+    }, dino::core::ListenerCallPoint::kPost);
 }
 
 DObjectTableModel::~DObjectTableModel() = default;
@@ -82,13 +128,31 @@ void DObjectTableModel::RemoveColumns(int first, int last) {
   endRemoveColumns();
 }
 
-void DObjectTableModel::RemoveColumn(const QString& name) {
-  auto itr = std::find_if(
-      impl_->col_info_list.begin(),
-      impl_->col_info_list.end(),
-      [&name](auto& col_info) { return col_info.ColumnName() == name; });
-  int col = std::distance(impl_->col_info_list.begin(), itr);
-  RemoveColumns(col, col);
+QModelIndex DObjectTableModel::ObjectToIndex(const core::DObjectSp& obj) const {
+  auto child = obj;
+  auto root_id = impl_->root_obj->ObjectID();
+  while (child->Parent()
+         && root_id != child->Parent()->ObjectID())
+    child = child->Parent();
+  if (!child->Parent())
+    return QModelIndex();
+  auto children = impl_->root_obj->Children();
+  auto target_name = obj->Name();
+  auto row = std::distance(
+      children.cbegin(),
+      std::find_if(children.cbegin(), children.cend(),
+                   [&target_name](auto& obj_info) {
+                     return obj_info.Name() == target_name;} ));
+  return index(row, 0, QModelIndex());
+}
+
+core::DObjectSp DObjectTableModel::IndexToObject(const QModelIndex& index) const {
+  if (!index.isValid())
+    return impl_->root_obj;
+  auto children = impl_->root_obj->Children();
+  if (index.row() >= static_cast<int>(children.size()))
+    return nullptr;
+  return impl_->root_obj->GetChildObject(children[index.row()].Name());
 }
 
 int DObjectTableModel::rowCount(const QModelIndex&) const {
@@ -97,6 +161,15 @@ int DObjectTableModel::rowCount(const QModelIndex&) const {
 
 int DObjectTableModel::columnCount(const QModelIndex&) const {
   return impl_->col_info_list.size();
+}
+
+QVariant DObjectTableModel::headerData(
+    int section, Qt::Orientation orient, int role) const {
+  if (role != Qt::DisplayRole)
+    return QVariant();
+  if (orient == Qt::Vertical)
+    return QVariant();
+  return impl_->col_info_list[section].ColumnName();
 }
 
 QVariant DObjectTableModel::data(const QModelIndex& index, int role) const {
