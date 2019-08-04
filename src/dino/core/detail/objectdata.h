@@ -98,6 +98,8 @@ class ObjectData {
 
   ObjectData* GetDataAt(const DObjPath& path);
 
+  ConstSessionPtr GetSession() const;
+
   static DataSp Create(const DObjPath& obj_path,
                        const std::string& type,
                        ObjectData* parent,

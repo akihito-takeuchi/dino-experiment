@@ -281,6 +281,10 @@ void DObject::Save() {
   impl_->GetRawData()->Save();
 }
 
+ConstSessionPtr DObject::GetSession() const {
+  return impl_->GetRawData()->GetSession();
+}
+
 bool DObject::IsObjectDir(const FsPath& path) {
   auto file_info = detail::ObjectData::GetFileInfo(path);
   return file_info.IsValid();

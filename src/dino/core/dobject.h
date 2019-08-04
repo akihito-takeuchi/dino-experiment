@@ -86,6 +86,8 @@ class DObject {
 
   void Save();
 
+  ConstSessionPtr GetSession() const;
+
   static bool IsObjectDir(const FsPath &path);
 
  private:

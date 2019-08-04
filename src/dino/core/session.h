@@ -21,7 +21,7 @@ class ObjectData;
 
 }  // namespace detail
 
-class Session {
+class Session : public std::enable_shared_from_this<Session> {
  public:
   Session(const Session&) = delete;
   Session& operator=(const Session&) = delete;

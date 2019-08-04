@@ -1431,6 +1431,10 @@ ObjectData* ObjectData::GetDataAt(const DObjPath& obj_path) {
   return impl_->GetObject(obj_path)->GetData();
 }
 
+ConstSessionPtr ObjectData::GetSession() const {
+  return impl_->Owner()->shared_from_this();
+}
+
 DObjFileInfo ObjectData::GetFileInfo(const FsPath& path) {
   return DataIOFactory::GetDataFileInfo(path);
 }
