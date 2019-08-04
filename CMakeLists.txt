@@ -61,3 +61,10 @@ if(with-test)
   include_directories(${GTEST_INCLUDE_DIRS})
   add_subdirectory(tests)
 endif(with-test)
+
+# For examples
+set(with-example true)
+
+if(with-example)
+  add_subdirectory(example)
+endif(with-example)
