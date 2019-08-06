@@ -35,17 +35,17 @@ class CommandStack : public CommandExecuter {
   // Create command
   virtual void UpdateValue(
       CommandType type,
-      const DObjPath& path,
+      detail::ObjectData* data,
       const std::string& key,
       const DValue& new_value,
       const DValue& prev_value) override;
   virtual void UpdateBaseObjectList(
       CommandType type,
-      const DObjPath& path,
+      detail::ObjectData* data,
       const DObjectSp& base_obj_name) override;
   virtual DObjectSp UpdateChildList(
       CommandType type,
-      const DObjPath& path,
+      detail::ObjectData* data,
       const std::string& child_name,
       const std::string& obj_type,
       bool is_flattened) override;
@@ -74,6 +74,7 @@ class CommandStack : public CommandExecuter {
   size_t current_pos_ = 0;
   size_t clean_pos_ = 0;
   bool in_batch_ = false;
+  bool in_command_ = false;
   friend class DObject;
   friend class detail::ObjectData;
 };

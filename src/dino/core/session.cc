@@ -111,6 +111,7 @@ class Session::Impl {
   void PreOpenObjectCheck(const DObjPath& obj_path,
                           const FsPath& dir_path = FsPath()) const;
   DObjectSp MakeObject(const DObjPath& obj_path) const;
+  DObjectSp MakeDefaultObject(const DObjPath& obj_path) const;
   DObjectSp OpenTopLevelObject(const FsPath& dir_path,
                                const std::string& name);
   DObjectSp OpenObject(const DObjPath& obj_path);
@@ -309,7 +310,7 @@ void Session::Impl::PreNewObjectCheck(const DObjPath& obj_path) const {
 
   DObjectSp parent_obj;
   try {
-    parent_obj = GetObject(obj_path.ParentPath());
+    parent_obj = MakeDefaultObject(obj_path.ParentPath());
   } catch (const DException&) {
     BOOST_THROW_EXCEPTION(
         SessionException(kErrParentObjectNotOpened) << name_info);
@@ -515,6 +516,15 @@ DObjectSp Session::Impl::MakeObject(const DObjPath& obj_path) const {
         << ExpInfo1(obj_path.String()));
   auto data = obj_data_map_.find(obj_path)->second;
   return std::shared_ptr<DObject>(ObjectFactory::Instance().Create(data));
+}
+
+DObjectSp Session::Impl::MakeDefaultObject(const DObjPath& obj_path) const {
+  if (!HasObjectData(obj_path))
+    BOOST_THROW_EXCEPTION(
+        SessionException(kErrObjectDataNotOpened)
+        << ExpInfo1(obj_path.String()));
+  auto data = obj_data_map_.find(obj_path)->second;
+  return std::make_shared<DObject>(data);
 }
 
 void Session::Impl::PurgeObject(const DObjPath& obj_path, bool check_existence) {

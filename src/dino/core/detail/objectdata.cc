@@ -168,7 +168,7 @@ class ObjectData::Impl {
   size_t ChildCount() const;
   bool IsFlattened() const;
   bool IsChildFlat(const std::string& name) const;
-  void SetChildFlat(const std::string& name);
+  void SetChildFlat(const std::string& name, bool flag_only = false);
   void UnsetChildFlat(const std::string& name);
   DObjectSp GetChildObject(size_t index) const;
   DObjectSp GetChildObject(const std::string& name) const;
@@ -196,13 +196,15 @@ class ObjectData::Impl {
 
   boost::signals2::connection AddListener(
       const ObjectListenerFunc& listener, ListenerCallPoint call_point);
+  void DisableSignal();
+  void EnableSignal();
 
   void Load();
   void Save();
   void RefreshChildren();
 
   CommandStackSp EnableCommandStack(bool enable);
-  ObjectData* FindObjWithCommandStackInHier() const;
+  ObjectData* FindAncestorWithCommandStack() const;
   CommandStackSp GetCommandStack() const;
   CommandExecuterSp Executer() const;
 
@@ -275,6 +277,8 @@ class ObjectData::Impl {
   int editable_ref_count_ = 0;
   int ref_count_ = 0;
   bool dirty_ = false;
+  bool signal_enabled_ = true;
+  DObjPath add_child_top_;
 };
 
 ObjectData::Impl::Impl(ObjectData* self,
@@ -385,7 +389,7 @@ void ObjectData::Impl::Put(const std::string& key, const DValue& value) {
       edit_type = CommandType::kUpdate;
   }
   if (edit_type != CommandType::kUnknown)
-    Executer()->UpdateValue(edit_type, Path(), key, value, prev_value);
+    Executer()->UpdateValue(edit_type, self_, key, value, prev_value);
 }
 
 void ObjectData::Impl::RemoveKey(const std::string& key) {
@@ -394,7 +398,7 @@ void ObjectData::Impl::RemoveKey(const std::string& key) {
     BOOST_THROW_EXCEPTION(
         ObjectDataException(kErrNoKey)
         << ExpInfo1(Path().String()) << ExpInfo2(key));
-  Executer()->UpdateValue(CommandType::kDelete, Path(), key, nil, itr->second);
+  Executer()->UpdateValue(CommandType::kDelete, self_, key, nil, itr->second);
 }
 
 bool ObjectData::Impl::IsLocal(const std::string& key) const {
@@ -516,7 +520,7 @@ bool ObjectData::Impl::IsChildFlat(const std::string& name) const {
   return itr->second;
 }
 
-void ObjectData::Impl::SetChildFlat(const std::string& name) {
+void ObjectData::Impl::SetChildFlat(const std::string& name, bool flag_only) {
   if (!HasLocalChild(name))
     BOOST_THROW_EXCEPTION(
         ObjectDataException(kErrChildNotExist)
@@ -524,18 +528,20 @@ void ObjectData::Impl::SetChildFlat(const std::string& name) {
   if (IsChildFlat(name))
     return;
   SetDirty(true);
-  try {
-    auto child_data = ChildData(name, true);
-    auto dir_initialized = !child_data->impl_->dir_path_.empty();
-    if (dir_initialized)
-      child_data->impl_->RemoveLockFile();
-    for (auto grand_child_info : child_data->Children())
-      child_data->SetChildFlat(grand_child_info.Name());
-    if (dir_initialized) {
-      CleanUpObjectDirectory(child_data->impl_->dir_path_);
-      child_data->impl_->dir_path_.clear();
+  if (!flag_only) {
+    try {
+      auto child_data = ChildData(name, true);
+      auto dir_initialized = !child_data->impl_->dir_path_.empty();
+      if (dir_initialized)
+        child_data->impl_->RemoveLockFile();
+      for (auto grand_child_info : child_data->Children())
+        child_data->SetChildFlat(grand_child_info.Name());
+      if (dir_initialized) {
+        CleanUpObjectDirectory(child_data->impl_->dir_path_);
+        child_data->impl_->dir_path_.clear();
+      }
+    } catch (const DException&) {
     }
-  } catch (const DException&) {
   }
   child_flat_flags_[name] = true;
 }
@@ -575,12 +581,14 @@ DObjectSp ObjectData::Impl::OpenChildObject(const std::string& name) const {
 
 DObjectSp ObjectData::Impl::CreateChild(
     const std::string& name, const std::string& type, bool is_flattened) {
-  if (HasLocalChild(name))
-    BOOST_THROW_EXCEPTION(
-        ObjectDataException(kErrChildDataAlreadyExists)
-        << ExpInfo1(name) << ExpInfo2(Path().String()));
+  if (HasLocalChild(name)) {
+    auto child_path = obj_path_.ChildPath(name);
+    auto child = owner_->OpenObject(child_path);
+    child->SetEditable();
+    return child;
+  }
   return Executer()->UpdateChildList(
-      CommandType::kAdd, Path(), name, type, is_flattened);
+      CommandType::kAdd, self_, name, type, is_flattened);
 }
 
 DObjectSp ObjectData::Impl::Parent() const {
@@ -614,7 +622,7 @@ void ObjectData::Impl::DeleteChild(const std::string& name) {
         << ExpInfo1(name) << ExpInfo2(Path().String()));
   auto child_info = GetChildInfo(name);
   Executer()->UpdateChildList(
-      CommandType::kDelete, Path(), name, child_info.Type(), IsChildFlat(name));
+      CommandType::kDelete, self_, name, child_info.Type(), IsChildFlat(name));
 }
 
 void ObjectData::Impl::AcquireWriteLock() {
@@ -767,7 +775,7 @@ void ObjectData::Impl::AddBase(const DObjectSp& base) {
                           [&base](auto b) { return b.path == base->Path(); });
   if (itr != base_info_list_.cend())
     return;
-  Executer()->UpdateBaseObjectList(CommandType::kAdd, Path(), base);
+  Executer()->UpdateBaseObjectList(CommandType::kAdd, self_, base);
 }
 
 std::vector<DObjectSp> ObjectData::Impl::BaseObjects() const {
@@ -787,12 +795,20 @@ void ObjectData::Impl::RemoveBase(const DObjectSp& base) {
     BOOST_THROW_EXCEPTION(
         ObjectDataException(kErrNotBaseObject)
         << ExpInfo1(base->Path().String()) << ExpInfo2(Path().String()));
-  Executer()->UpdateBaseObjectList(CommandType::kDelete, Path(), base);
+  Executer()->UpdateBaseObjectList(CommandType::kDelete, self_, base);
 }
 
 boost::signals2::connection ObjectData::Impl::AddListener(
     const ObjectListenerFunc& listener, ListenerCallPoint call_point) {
   return sig_[static_cast<unsigned int>(call_point)].connect(listener);
+}
+
+void ObjectData::Impl::DisableSignal() {
+  signal_enabled_ = false;
+}
+
+void ObjectData::Impl::EnableSignal() {
+  signal_enabled_ = true;
 }
 
 void ObjectData::Impl::Save() {
@@ -942,10 +958,30 @@ void ObjectData::Impl::ExecRemoveBase(const DObjectSp& base) {
 
 void ObjectData::Impl::EmitSignal(
     const Command& cmd, ListenerCallPoint call_point) {
-  sig_[static_cast<unsigned int>(call_point)](cmd);
-  auto cmd_stack_obj = FindObjWithCommandStackInHier();
-  if (cmd_stack_obj && cmd_stack_obj != self_)
-    cmd_stack_obj->impl_->EmitSignal(cmd, call_point);
+  // Need special handling for add child
+  bool enable_signal_by_add_child =
+      add_child_top_.Empty()
+      || !cmd.ObjPath().IsDescendantOf(add_child_top_, true);
+  if (cmd.Type() == CommandType::kAddChild
+      || cmd.Type() == CommandType::kAddFlattenedChild) {
+    if (call_point == ListenerCallPoint::kPre
+        && add_child_top_.Empty()) {
+      add_child_top_ = cmd.ObjPath();
+    } else if (call_point == ListenerCallPoint::kPost
+               && !add_child_top_.Empty()
+               && cmd.ObjPath() == add_child_top_) {
+      add_child_top_.Clear();
+      enable_signal_by_add_child = true;
+    }
+  }
+  bool is_to_emit = signal_enabled_ && enable_signal_by_add_child;
+
+  if (is_to_emit) {
+    sig_[static_cast<unsigned int>(call_point)](cmd);
+    auto ancestor_cmd_stack_obj = FindAncestorWithCommandStack();
+    if (ancestor_cmd_stack_obj)
+      ancestor_cmd_stack_obj->impl_->EmitSignal(cmd, call_point);
+  }
 }
 
 bool ObjectData::Impl::CreateEmpty(const FsPath& dir_path) {
@@ -1086,16 +1122,18 @@ CommandStackSp ObjectData::Impl::EnableCommandStack(bool enable) {
   return command_stack_;
 }
 
-ObjectData* ObjectData::Impl::FindObjWithCommandStackInHier() const {
-  if (command_stack_)
-    return self_;
-  if (parent_)
-    return parent_->impl_->FindObjWithCommandStackInHier();
-  return nullptr;
+ObjectData* ObjectData::Impl::FindAncestorWithCommandStack() const {
+  if (!parent_)
+    return nullptr;
+  if (parent_->impl_->command_stack_)
+    return parent_;
+  return parent_->impl_->FindAncestorWithCommandStack();
 }
 
 CommandStackSp ObjectData::Impl::GetCommandStack() const {
-  auto target_obj = FindObjWithCommandStackInHier();
+  if (command_stack_)
+    return command_stack_;
+  auto target_obj = FindAncestorWithCommandStack();
   if (target_obj)
     return target_obj->impl_->command_stack_;
   return nullptr;
@@ -1326,6 +1364,14 @@ boost::signals2::connection ObjectData::AddListener(
   return impl_->AddListener(listener, call_point);
 }
 
+void ObjectData::DisableSignal() {
+  impl_->DisableSignal();
+}
+
+void ObjectData::EnableSignal() {
+  impl_->EnableSignal();
+}
+
 CommandStackSp ObjectData::EnableCommandStack(bool enable) {
   return impl_->EnableCommandStack(enable);
 }
@@ -1373,14 +1419,20 @@ void ObjectData::ExecAddValue(const std::string& key,
 DObjectSp ObjectData::ExecCreateChild(const std::string& name,
                                       const std::string& type,
                                       bool is_flattened) {
-  auto prev_children = Children();
   auto child_path = Path().ChildPath(name);
+  auto prev_children = Children();
   Command cmd(CommandType::kAddChild, Path(),
               "", nil, nil, child_path, type, prev_children);
   impl_->EmitSignal(cmd, ListenerCallPoint::kPre);
-  auto child = impl_->Owner()->CreateObjectImpl(child_path, type, is_flattened);
-  if (is_flattened)
-    SetDirty(true);
+  DObjectSp child;
+  if (HasLocalChild(name)) {
+    child = impl_->Owner()->OpenObject(child_path);
+    child->SetEditable();
+  } else {
+    child = impl_->Owner()->CreateObjectImpl(child_path, type, is_flattened);
+    if (is_flattened)
+      SetDirty(true);
+  }
   impl_->EmitSignal(cmd, ListenerCallPoint::kPost);
   return child;
 }
@@ -1405,7 +1457,7 @@ DataSp ObjectData::Create(const DObjPath& obj_path,
   auto data = std::shared_ptr<ObjectData>(
       new ObjectData(obj_path, type, parent, owner, is_flattened));
   if (parent && parent->IsFlattened()) {
-    parent->SetChildFlat(obj_path.LeafName());
+    parent->impl_->SetChildFlat(obj_path.LeafName(), true);
     parent->SetDirty(true);
   }
 

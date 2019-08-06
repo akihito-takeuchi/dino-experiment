@@ -80,6 +80,8 @@ class DObject {
 
   boost::signals2::connection AddListener(
       const ObjectListenerFunc& listener, ListenerCallPoint call_point);
+  void DisableSignal();
+  void EnableSignal();
 
   CommandStackSp EnableCommandStack(bool enable = true);
   CommandStackSp GetCommandStack() const;

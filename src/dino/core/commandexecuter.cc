@@ -13,7 +13,7 @@ CommandExecuter::CommandExecuter(Session* session, detail::ObjectData* root_data
 }
 
 void CommandExecuter::UpdateValue(CommandType type,
-                                  const DObjPath& /*path*/,
+                                  detail::ObjectData* data,
                                   const std::string& key,
                                   const DValue& new_value,
                                   const DValue& prev_value) {
@@ -21,28 +21,28 @@ void CommandExecuter::UpdateValue(CommandType type,
       static_cast<int>(type) & static_cast<int>(CommandType::kEditTypeMask));
   if (edit_type == CommandType::kAdd
       || edit_type == CommandType::kUpdate) {
-    root_data_->ExecUpdateValue(key, new_value, prev_value);
+    data->ExecUpdateValue(key, new_value, prev_value);
   } else if (edit_type == CommandType::kDelete) {
-    root_data_->ExecRemoveValue(key, prev_value);
+    data->ExecRemoveValue(key, prev_value);
   } else if (edit_type == CommandType::kAdd) {
-    root_data_->ExecAddValue(key, new_value);
+    data->ExecAddValue(key, new_value);
   }
 }
 
 void CommandExecuter::UpdateBaseObjectList(CommandType type,
-                                           const DObjPath& /*path*/,
+                                           detail::ObjectData* data,
                                            const DObjectSp& base_obj) {
   auto edit_type = static_cast<CommandType>(
       static_cast<int>(type) & static_cast<int>(CommandType::kEditTypeMask));
   if (edit_type == CommandType::kAdd) {
-    root_data_->ExecAddBase(base_obj);
+    data->ExecAddBase(base_obj);
   } else if (edit_type == CommandType::kDelete) {
-    root_data_->ExecRemoveBase(base_obj);
+    data->ExecRemoveBase(base_obj);
   }
 }
 
 DObjectSp CommandExecuter::UpdateChildList(CommandType type,
-                                           const DObjPath& /*path*/,
+                                           detail::ObjectData* data,
                                            const std::string& child_name,
                                            const std::string& obj_type,
                                            bool is_flattened) {
@@ -50,9 +50,9 @@ DObjectSp CommandExecuter::UpdateChildList(CommandType type,
       static_cast<int>(type) & static_cast<int>(CommandType::kEditTypeMask));
   DObjectSp child;
   if (edit_type == CommandType::kAdd) {
-    child = root_data_->ExecCreateChild(child_name, obj_type, is_flattened);
+    child = data->ExecCreateChild(child_name, obj_type, is_flattened);
   } else if (edit_type == CommandType::kDelete) {
-    root_data_->ExecDeleteChild(child_name);
+    data->ExecDeleteChild(child_name);
   }
   return child;
 }

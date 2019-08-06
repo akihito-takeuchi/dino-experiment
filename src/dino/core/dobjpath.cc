@@ -97,6 +97,22 @@ std::string DObjPath::LeafName() const {
   return path_elems_.back();
 }
 
+bool DObjPath::IsDescendantOf(
+    const DObjPath& ancestor, bool include_self) const {
+  if (include_self && ancestor == *this)
+    return true;
+  if (ancestor.path_elems_.size() >= path_elems_.size())
+    return false;
+  for (size_t idx = 0; idx < ancestor.path_elems_.size(); ++ idx)
+    if (ancestor.path_elems_[idx] != path_elems_[idx])
+      return false;
+  return true;
+}
+
+void DObjPath::Clear() {
+  path_elems_.clear();
+}
+
 DObjPath DObjPath::Leaf() const {
   return DObjPath(LeafName());
 }

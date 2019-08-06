@@ -33,6 +33,9 @@ class DObjPath {
   DObjPath ParentPath() const;
   std::string LeafName() const;
   DObjPath Leaf() const;
+  bool IsDescendantOf(const DObjPath& ancestor,
+                      bool include_self = false) const;
+  void Clear();
   bool operator==(const DObjPath& other) const;
   bool operator!=(const DObjPath& other) const;
 

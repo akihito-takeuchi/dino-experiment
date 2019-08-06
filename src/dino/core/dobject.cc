@@ -265,6 +265,14 @@ boost::signals2::connection DObject::AddListener(
   return impl_->GetRawData()->AddListener(listener, call_point);
 }
 
+void DObject::DisableSignal() {
+  impl_->GetRawData()->DisableSignal();
+}
+
+void DObject::EnableSignal() {
+  impl_->GetRawData()->EnableSignal();
+}
+
 CommandStackSp DObject::EnableCommandStack(bool enable) {
   return impl_->GetRawData()->EnableCommandStack(enable);
 }

@@ -83,9 +83,11 @@ void CommandStack::Redo() {
     BOOST_THROW_EXCEPTION(
         CommandStackException(kErrNoRedoEntry)
         << ExpInfo1(RootObjPath().String()));
+  in_command_ = true;
   for (auto& cmd : stack_[current_pos_].second)
     ExecRedo(cmd);
   current_pos_ ++;
+  in_command_ = false;
   sig_();
 }
 
@@ -98,9 +100,11 @@ void CommandStack::Undo() {
     BOOST_THROW_EXCEPTION(
         CommandStackException(kErrNoUndoEntry)
         << ExpInfo1(RootObjPath().String()));
+  in_command_ = true;
   for (auto& cmd : stack_[current_pos_-1].second | boost::adaptors::reversed)
     ExecUndo(cmd);
   current_pos_ --;
+  in_command_ = false;
   sig_();
 }
 
@@ -128,44 +132,66 @@ void CommandStack::PushBatchCommand(const std::string& description,
 }
 
 void CommandStack::UpdateValue(CommandType type,
-                               const DObjPath& path,
+                               detail::ObjectData* data,
                                const std::string& key,
                                const DValue& new_value,
                                const DValue& prev_value) {
+  if (in_command_) {
+    CommandExecuter::UpdateValue(type, data, key, new_value, prev_value);
+    return;
+  }
+  in_command_ = true;
   CommandType cmd_type = static_cast<CommandType>(
       static_cast<int>(type)
       | static_cast<int>(CommandType::kValueUpdateType));
-  Command cmd(cmd_type, path, key, new_value, prev_value,
+  Command cmd(cmd_type, data->Path(), key, new_value, prev_value,
               DObjPath(), "", {});
   PushCommand(cmd);
+  in_command_ = false;
 }
 
 void CommandStack::UpdateBaseObjectList(CommandType type,
-                                        const DObjPath& path,
+                                        detail::ObjectData* data,
                                         const DObjectSp& base_obj) {
+  if (in_command_) {
+    CommandExecuter::UpdateBaseObjectList(type, data, base_obj);
+    return;
+  }
+  in_command_ = true;
   CommandType cmd_type = static_cast<CommandType>(
       static_cast<int>(type)
       | static_cast<int>(CommandType::kBaseObjectUpdateType));
-  Command cmd(cmd_type, path, "", nil, nil, base_obj->Path(), base_obj->Type(),
-              session_->GetObject(path)->Children());
+  Command cmd(cmd_type, data->Path(), "", nil, nil, base_obj->Path(), base_obj->Type(),
+              data->Children());
   PushCommand(cmd);
+  in_command_ = false;
 }
 
 DObjectSp CommandStack::UpdateChildList(CommandType type,
-                                        const DObjPath& path,
+                                        detail::ObjectData* data,
                                         const std::string& child_name,
                                         const std::string& obj_type,
                                         bool is_flattened) {
+  if (in_command_)
+    return CommandExecuter::UpdateChildList(
+        type, data, child_name, obj_type, is_flattened);
+  in_command_ = true;
   CommandType cmd_type = static_cast<CommandType>(
       static_cast<int>(type)
       | static_cast<int>(CommandType::kChildListUpdateType));
   if (is_flattened && type == CommandType::kAddChild)
     type = CommandType::kAddFlattenedChild;
-  Command cmd(cmd_type, path, "", nil, nil, child_name, obj_type,
-              session_->GetObject(path)->Children());
+  auto path = data->Path();
+  Command cmd(
+      cmd_type, path, "", nil, nil, child_name, obj_type, data->Children());
   PushCommand(cmd);
-  DObjectSp child = session_->GetObject(path.ChildPath(child_name));
-  child->SetEditable();
+
+  DObjectSp child;
+  if (type == CommandType::kAdd) {
+    child = session_->GetObject(path.ChildPath(child_name));
+    child->SetEditable();
+  }
+  in_command_ = false;
   return child;
 }
 

@@ -27,17 +27,17 @@ class CommandExecuter {
   // Create command
   virtual void UpdateValue(
       CommandType type,
-      const DObjPath& path,
+      detail::ObjectData* data,
       const std::string& key,
       const DValue& new_value,
       const DValue& prev_value);
   virtual void UpdateBaseObjectList(
       CommandType type,
-      const DObjPath& path,
+      detail::ObjectData* data,
       const DObjectSp& base_obj);
   virtual DObjectSp UpdateChildList(
       CommandType type,
-      const DObjPath& path,
+      detail::ObjectData* data,
       const std::string& child_name,
       const std::string& obj_type,
       bool is_flattened);

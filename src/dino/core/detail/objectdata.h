@@ -86,6 +86,8 @@ class ObjectData {
 
   boost::signals2::connection AddListener(
       const ObjectListenerFunc& listener, ListenerCallPoint call_point);
+  void DisableSignal();
+  void EnableSignal();
 
   CommandStackSp EnableCommandStack(bool enable);
   CommandStackSp GetCommandStack() const;
