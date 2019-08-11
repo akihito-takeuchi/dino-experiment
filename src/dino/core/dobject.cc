@@ -184,8 +184,8 @@ DObjectSp DObject::Parent() const {
   return impl_->GetRawData()->Parent();
 }
 
-uintptr_t DObject::ObjectID() const {
-  return impl_->GetRawData()->ObjectID();
+uintptr_t DObject::ObjectId() const {
+  return impl_->GetRawData()->ObjectId();
 }
 
 void DObject::RefreshChildren() {

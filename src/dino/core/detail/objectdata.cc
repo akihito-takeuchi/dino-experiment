@@ -1303,7 +1303,7 @@ DObjectSp ObjectData::Parent() const {
   return impl_->Parent();
 }
 
-uintptr_t ObjectData::ObjectID() const {
+uintptr_t ObjectData::ObjectId() const {
   return reinterpret_cast<uintptr_t>(this);
 }
 

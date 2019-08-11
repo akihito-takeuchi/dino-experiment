@@ -29,6 +29,7 @@ if(enable-qt)
   add_library(dino_qt
     dino/qt/columninfo.cc
     dino/qt/dobjecttablemodel.cc
+    dino/qt/dobjecttreemodel.cc
     )
 
   target_link_libraries(dino_qt dino_core)

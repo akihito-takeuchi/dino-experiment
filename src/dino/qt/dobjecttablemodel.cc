@@ -130,9 +130,9 @@ void DObjectTableModel::RemoveColumns(int first, int last) {
 
 QModelIndex DObjectTableModel::ObjectToIndex(const core::DObjectSp& obj) const {
   auto child = obj;
-  auto root_id = impl_->root_obj->ObjectID();
+  auto root_id = impl_->root_obj->ObjectId();
   while (child->Parent()
-         && root_id != child->Parent()->ObjectID())
+         && root_id != child->Parent()->ObjectId())
     child = child->Parent();
   if (!child->Parent())
     return QModelIndex();
