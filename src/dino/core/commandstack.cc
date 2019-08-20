@@ -300,7 +300,7 @@ void CommandStack::StoreChildData(detail::ObjectData* obj,
 void CommandStack::RestoreChildData(detail::ObjectData* obj,
                                     const RemovedDataSp& data) {
   DObjectSp child_obj;
-  if (obj->HasLocalChild(dta->name))
+  if (obj->HasLocalChild(data->name))
     child_obj = session_->GetObject(obj->Path().ChildPath(data->name));
   else
     child_obj = obj->ExecCreateChild(

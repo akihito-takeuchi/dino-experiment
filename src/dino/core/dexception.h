@@ -7,7 +7,10 @@
 #include <stdexcept>
 #include <boost/lexical_cast.hpp>
 #include <boost/exception/all.hpp>
+#ifdef ENABLE_STACKTRACE
+#define BOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED
 #include <boost/stacktrace.hpp>
+#endif
 
 namespace dino {
 

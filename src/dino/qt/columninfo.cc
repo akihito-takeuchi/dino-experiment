@@ -31,8 +31,8 @@ struct DValueToQVariant : public boost::static_visitor<QVariant> {
   QVariant operator()(const std::vector<dino::core::DValue>& values) const {
     std::vector<std::string> result_strs;
     std::transform(values.cbegin(), values.cend(),
-                   std::back_inserter(results_strs);
-                   [this](auto& v) { return boost::apply_visitor(
+                   std::back_inserter(result_strs),
+                   [](auto& v) { return boost::apply_visitor(
                        dino::core::detail::DValueToString(',', '(', ')'), v); });
     return QString::fromStdString(
         fmt::format("({})", boost::algorithm::join(result_strs, ",")));
