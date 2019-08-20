@@ -11,6 +11,12 @@
 
 namespace fs = boost::filesystem;
 
+#define REQUIRE_EDITABLE()                              \
+  if (!IsEditable())                                    \
+    BOOST_THROW_EXCEPTION(                              \
+        DObjectException(kErrObjectIsNotEditable)       \
+        << ExpInfo1(Name()));
+
 namespace dino {
 
 namespace core {
@@ -33,7 +39,6 @@ struct DObject::Impl {
   void SetEditable();
   void SetReadOnly();
   bool IsExpired() const;
-  void RequireEditable();
 
  private:
   DObjPath path_;
@@ -74,13 +79,6 @@ bool DObject::Impl::IsExpired() const {
   return data_.expired();
 }
 
-void DObject::Impl::RequireEditable() {
-  if (!IsEditable())
-    BOOST_THROW_EXCEPTION(
-        DObjectException(kErrObjectIsNotEditable)
-        << ExpInfo1(Name()));
-}
-
 DObject::DObject(const DataWp& data)
     : impl_(std::make_unique<Impl>(data)) {
 }
@@ -100,12 +98,12 @@ DValue DObject::Get(const std::string& key) const {
 }
 
 void DObject::Put(const std::string& key, const DValue& value) {
-  impl_->RequireEditable();
+  REQUIRE_EDITABLE();
   impl_->GetRawData()->Put(key, value);
 }
 
 void DObject::RemoveKey(const std::string& key) {
-  impl_->RequireEditable();
+  REQUIRE_EDITABLE();
   impl_->GetRawData()->RemoveKey(key);
 }
 
@@ -209,7 +207,7 @@ void DObject::UnsetChildFlat(const std::string& name) {
 }
 
 void DObject::DeleteChild(const std::string& name) {
-  impl_->RequireEditable();
+  REQUIRE_EDITABLE();
   impl_->GetRawData()->DeleteChild(name);
 }
 
@@ -248,7 +246,7 @@ void DObject::SetDirty(bool dirty) {
 }
 
 void DObject::AddBase(const DObjectSp& base) {
-  impl_->RequireEditable();
+  REQUIRE_EDITABLE();
   impl_->GetRawData()->AddBase(base);
 }
 

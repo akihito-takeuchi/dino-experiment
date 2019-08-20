@@ -124,6 +124,8 @@ void CommandStack::PushCommand(const Command& cmd) {
 void CommandStack::PushBatchCommand(const std::string& description,
                                     const BatchCommandData& batch_data,
                                     bool emit_signal) {
+  if (batch_data.empty())
+    return;
   stack_.resize(current_pos_);
   stack_.emplace_back(description, batch_data);
   current_pos_ ++;
@@ -287,23 +289,29 @@ void CommandStack::StoreChildData(detail::ObjectData* obj,
 
   auto children = target->Children();
   data->children.reserve(children.size());
+  auto obj_data = root_data_->GetDataAt(target->Path());
   for (auto& child : children) {
     auto child_data = std::make_shared<RemovedData>();
-    StoreChildData(root_data_->GetDataAt(child.Path()),
-                   child.Name(), child_data);
+    data->children.push_back(child_data);
+    StoreChildData(obj_data, child.Name(), child_data);
   }
 }
 
 void CommandStack::RestoreChildData(detail::ObjectData* obj,
                                     const RemovedDataSp& data) {
-  obj->ExecCreateChild(data->name, data->type, data->is_flattened);
-  auto target_obj = root_data_->GetDataAt(obj->Path().ChildPath(data->name));
+  DObjectSp child_obj;
+  if (obj->HasLocalChild(dta->name))
+    child_obj = session_->GetObject(obj->Path().ChildPath(data->name));
+  else
+    child_obj = obj->ExecCreateChild(
+        data->name, data->type, data->is_flattened);
+  auto child_obj_data = root_data_->GetDataAt(child_obj->Path());
   for (auto& kv : data->values)
-    target_obj->Put(kv.first, kv.second);
+    child_obj_data->Put(kv.first, kv.second);
   for (auto& base_path : data->base_objects)
-    target_obj->ExecAddBase(session_->GetObject(base_path));
+    child_obj_data->ExecAddBase(session_->GetObject(base_path));
   for (auto& child_data : data->children)
-    RestoreChildData(target_obj, child_data);
+    RestoreChildData(child_obj_data, child_data);
 }
 
 }  // namespace core

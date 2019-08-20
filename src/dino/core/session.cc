@@ -636,6 +636,7 @@ void Session::DeleteObject(const DObjPath& obj_path) {
   }
 
   auto parent = GetObject(obj_path.ParentPath());
+  parent->SetEditable();
   parent->DeleteChild(obj_path.LeafName());
 }
 
