@@ -7,15 +7,25 @@
 #include <stdexcept>
 #include <boost/lexical_cast.hpp>
 #include <boost/exception/all.hpp>
+#include <boost/stacktrace.hpp>
 
 namespace dino {
 
 namespace core {
 
+#ifdef ENABLE_STACKTRACE
+using StackTraceInfo = boost::error_info<struct StackTraceInfoTag,
+                                         boost::stacktrace::stacktrace>;
+#endif
+
 class DException : public boost::exception, public std::exception {
  public:
   DException(int error_code)
-      : boost::exception(), std::exception(), error_code_(error_code) {}
+      : boost::exception(), std::exception(), error_code_(error_code) {
+#ifdef ENABLE_STACKTRACE
+    *this << StackTraceInfo(boost::stacktrace::stacktrace());
+#endif
+  }
   DException(const DException& e)
       : boost::exception(e), error_code_(e.error_code_) {}
   virtual ~DException() = default;

@@ -22,9 +22,18 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Setup boost
-find_package(Boost
-  1.67 REQUIRED
-  COMPONENTS system filesystem)
+set(enable-stacktrace false)
+if(enable-stacktrace)
+  find_package(Boost
+    1.67 REQUIRED
+    COMPONENTS system filesystem
+    stacktrace_basic stacktrace_addr2line)
+  add_compile_definitions("ENABLE_STACKTRACE")
+else()
+  find_package(Boost
+    1.67 REQUIRED
+    COMPONENTS system filesystem)
+endif()
 include_directories(${Boost_INCLUDE_DIRS})
 
 set(enable-qt true)
