@@ -282,24 +282,19 @@ TEST_F(ObjectTest, Flat) {
     ASSERT_EQ(children_of_child1[1].Name(), kChildName3);
     ASSERT_EQ(child1->Type(), child1_type);
 
-    ASSERT_THROW(session->CreateObject(path2, child2_type),
-                 dc::DException);
     auto child2 = session->GetObject(path2);
+    child2 = session->CreateObject(path2, child2_type);
     ASSERT_TRUE(child2);
     ASSERT_FALSE(child2->IsDirty());
     ASSERT_EQ(child2->Children().size(), 0u);
     ASSERT_EQ(child2->Type(), child2_type);
 
-    ASSERT_THROW(session->CreateObject(path3, child3_type),
-                 dc::DException);
     auto child3 = session->GetObject(path3);
     ASSERT_TRUE(child3);
     ASSERT_FALSE(child3->IsDirty());
     ASSERT_EQ(child3->Children().size(), 0u);
     ASSERT_EQ(child3->Type(), child3_type);
 
-    ASSERT_THROW(session->CreateObject(path4, child4_type),
-                 dc::DException);
     ASSERT_THROW(session->GetObject(path4),
                  dc::DException);
     auto child4 = session->OpenObject(path4);
