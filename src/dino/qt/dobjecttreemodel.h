@@ -38,6 +38,7 @@ class DObjectTreeModel : public QAbstractItemModel {
   virtual QModelIndex parent(const QModelIndex& index) const override;
   core::DObjectSp IndexToObject(const QModelIndex& index) const;
   QModelIndex ObjectToIndex(const core::DObjectSp& obj) const;
+  core::DObjectSp RootObject() const;
 
  private:
   class Impl;

@@ -248,6 +248,10 @@ QModelIndex DObjectTreeModel::ObjectToIndex(const core::DObjectSp& obj) const {
   return impl_->GetIndexFromRoute(route_to_root, QModelIndex());
 }
 
+core::DObjectSp DObjectTreeModel::RootObject() const {
+  return impl_->root_obj;
+}
+
 }  // namespace qt
 
 }  // namespace dino

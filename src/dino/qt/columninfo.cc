@@ -4,12 +4,40 @@
 #include "dino/qt/dobjecttablemodel.h"
 
 #include <QList>
+#include <fmt/format.h>
 
 #include "dino/core/dobject.h"
 
 namespace dino {
 
 namespace qt {
+
+struct DValueToQVariant : public boost::static_visitor<QVariant> {
+  QVariant operator()(dino::core::DNilType) const {
+    return "nil";
+  }
+  QVariant operator()(int v) const {
+    return v;
+  }
+  QVariant operator()(double v) const {
+    return v;
+  }
+  QVariant operator()(bool v) const {
+    return v;
+  }
+  QVariant operator()(const std::string& v) const {
+    return QString::fromStdString(v);
+  }
+  QVariant operator()(const std::vector<dino::core::DValue>& values) const {
+    std::vector<std::string> result_strs;
+    std::transform(values.cbegin(), values.cend(),
+                   std::back_inserter(results_strs);
+                   [this](auto& v) { return boost::apply_visitor(
+                       dino::core::detail::DValueToString(',', '(', ')'), v); });
+    return QString::fromStdString(
+        fmt::format("({})", boost::algorithm::join(result_strs, ",")));
+  }
+};
 
 ColumnInfo::ColumnInfo(
     const QString& col_name,
@@ -40,16 +68,38 @@ QString ColumnInfo::SourceName() const {
 }
 
 QVariant ColumnInfo::GetData(const core::DObjectSp& obj, int role) const {
-  return get_data_func_(obj, role);
+  if (get_data_func_)
+    return get_data_func_(obj, role);
+
+  // Default GetData function
+  if (role == Qt::DisplayRole) {
+    switch (source_type_) {
+      case SourceTypeConst::kName:
+        return QString::fromStdString(obj->Name());
+      case SourceTypeConst::kType:
+        return QString::fromStdString(obj->Type());
+      case SourceTypeConst::kValue:
+        return boost::apply_visitor(
+            DValueToQVariant(),
+            obj->Get(source_name_.toStdString(), std::string()));
+      default:
+        break;
+    }
+  }
+  return QVariant();
 }
 
 Qt::ItemFlags ColumnInfo::GetFlags(const core::DObjectSp& obj) const {
-  return get_flags_func_(obj);
+  if (get_flags_func_)
+    return get_flags_func_(obj);
+  return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
 }
 
 bool ColumnInfo::SetData(
     const core::DObjectSp& obj, const QVariant& value, int role) const {
-  return set_data_func_(obj, value, role);
+  if (set_data_func_)
+    return set_data_func_(obj, value, role);
+  return false;
 }
 
 }  // namespace qt
