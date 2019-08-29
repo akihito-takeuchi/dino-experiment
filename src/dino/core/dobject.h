@@ -44,11 +44,13 @@ class DObject {
   FsPath DirPath() const;
   DObjPath Path() const;
 
+  bool IsActual() const;
   bool HasChild(const std::string& name) const;
   bool HasLocalChild(const std::string& name) const;
   bool IsLocalChild(const std::string& name) const;
   bool IsChildOpened(const std::string& name) const;
   std::vector<DObjInfo> Children() const;
+  DObjInfo ChildInfo(const std::string& name) const;
   size_t ChildCount() const;
   DObjectSp GetChildObject(size_t index) const;
   DObjectSp GetChildObject(const std::string& name) const;
@@ -77,6 +79,10 @@ class DObject {
   void AddBase(const DObjectSp& base);
   std::vector<DObjectSp> BaseObjects() const;
   void RemoveBase(const DObjectSp& base);
+
+  std::vector<DObjectSp> BaseObjectsFromParent() const;
+
+  std::vector<DObjectSp> EffectiveBases() const;
 
   boost::signals2::connection AddListener(
       const ObjectListenerFunc& listener, ListenerCallPoint call_point);

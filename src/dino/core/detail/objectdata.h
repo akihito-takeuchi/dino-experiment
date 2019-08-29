@@ -49,11 +49,13 @@ class ObjectData {
   FsPath DirPath() const;
   DObjPath Path() const;
 
+  bool IsActual() const;
   bool HasChild(const std::string& name) const;
   bool HasLocalChild(const std::string& name) const;
   bool IsLocalChild(const std::string& name) const;
   bool IsChildOpened(const std::string& name) const;
   std::vector<DObjInfo> Children() const;
+  DObjInfo ChildInfo(const std::string& name) const;
   size_t ChildCount() const;
   bool IsFlattened() const;
   bool IsChildFlat(const std::string& name) const;
@@ -83,6 +85,12 @@ class ObjectData {
   void AddBase(const DObjectSp& base);
   std::vector<DObjectSp> BaseObjects() const;
   void RemoveBase(const DObjectSp& base);
+
+  void AddBaseFromParent(const DObjectSp& base);
+  std::vector<DObjectSp> BaseObjectsFromParent() const;
+  void RemoveBaseFromParent(const DObjectSp& base);
+
+  std::vector<DObjectSp> EffectiveBases() const;
 
   boost::signals2::connection AddListener(
       const ObjectListenerFunc& listener, ListenerCallPoint call_point);

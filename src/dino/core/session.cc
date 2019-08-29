@@ -460,20 +460,41 @@ DObjectSp Session::Impl::OpenObject(const DObjPath& obj_path) {
   if (HasObjectData(obj_path))
     return GetObject(obj_path);
 
-  PreOpenObjectCheck(obj_path);
-
   auto top_dir = FindTopObjPathInfo(obj_path.TopName())->path;
   detail::DataSp parent;
   try {
+    // Find actual object data
     DObjPath current_path;
     DObjPath remaining_path(obj_path);
     while (remaining_path.Depth() > 1) {
       current_path = current_path.ChildPath(remaining_path.TopName());
       remaining_path = remaining_path.Tail();
-      if (!HasObjectData(current_path))
-        RegisterObjectData(detail::ObjectData::Open(
-            current_path, top_dir / current_path.Tail().String(),
-            parent.get(), self_));
+      if (!HasObjectData(current_path)) {
+        try {
+          RegisterObjectData(detail::ObjectData::Open(
+              current_path, top_dir / current_path.Tail().String(),
+              parent.get(), self_));
+        } catch (const DException&) {
+          auto name = current_path.LeafName();
+          auto parent_data = obj_data_map_[current_path.ParentPath()].get();
+          auto obj_info = parent_data->ChildInfo(name);
+          if (!obj_info.IsValid())
+            BOOST_THROW_EXCEPTION(
+                SessionException(kErrObjectDoesNotExist)
+                << ExpInfo1(current_path.String()));
+          auto is_flattened = ObjectFactory::Instance().UpdateFlattenedFlag(
+              obj_info.Type(), false);
+          RegisterObjectData(detail::ObjectData::Create(
+              current_path, obj_info.Type(), parent_data, self_, is_flattened));
+          auto data = obj_data_map_[current_path];
+          for (auto& base_of_parent : parent_data->EffectiveBases()) {
+            if (base_of_parent->HasChild(name)) {
+              auto base = base_of_parent->OpenChildObject(name);
+              data->AddBaseFromParent(base_of_parent);
+            }
+          }
+        }
+      }
       parent = obj_data_map_[current_path];
     }
     current_path = current_path.ChildPath(remaining_path.TopName());

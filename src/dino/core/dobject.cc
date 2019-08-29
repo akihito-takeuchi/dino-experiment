@@ -140,6 +140,10 @@ bool DObject::HasChild(const std::string& name) const {
   return impl_->GetRawData()->HasChild(name);
 }
 
+bool DObject::IsActual() const {
+  return impl_->GetRawData()->IsActual();
+}
+
 bool DObject::HasLocalChild(const std::string& name) const {
   return impl_->GetRawData()->HasLocalChild(name);
 }
@@ -154,6 +158,10 @@ bool DObject::IsChildOpened(const std::string& name) const {
 
 std::vector<DObjInfo> DObject::Children() const {
   return impl_->GetRawData()->Children();
+}
+
+DObjInfo DObject::ChildInfo(const std::string& name) const {
+  return impl_->GetRawData()->ChildInfo(name);
 }
 
 size_t DObject::ChildCount() const {
@@ -256,6 +264,14 @@ std::vector<DObjectSp> DObject::BaseObjects() const {
 
 void DObject::RemoveBase(const DObjectSp& base) {
   return impl_->GetRawData()->RemoveBase(base);
+}
+
+std::vector<DObjectSp> DObject::BaseObjectsFromParent() const {
+  return impl_->GetRawData()->BaseObjectsFromParent();
+}
+
+std::vector<DObjectSp> DObject::EffectiveBases() const {
+  return impl_->GetRawData()->EffectiveBases();
 }
 
 boost::signals2::connection DObject::AddListener(

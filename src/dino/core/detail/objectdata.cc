@@ -111,13 +111,11 @@ void RestoreBaseFromDict(DValueDict& attrs,
 }
 
 template<typename T, typename F>
-T ExecInObjWithKey(std::vector<BaseObjInfo>& base_info_list,
+T ExecInObjWithKey(std::vector<BaseObjInfo*>& base_info_list,
                    const F& func_info) {
   for (auto& base_info : base_info_list) {
-    if (!base_info.obj || base_info.obj->IsExpired())
-      base_info.obj = func_info.owner->OpenObject(base_info.path);
-    if (base_info.obj->HasKey(func_info.key))
-      return func_info.then(base_info);
+    if (base_info->obj->HasKey(func_info.key))
+      return func_info.then(*base_info);
   }
   return func_info.else_();
 }
@@ -159,11 +157,13 @@ class ObjectData::Impl {
   FsPath DirPath() const;
   DObjPath Path() const;
 
+  bool IsActual() const;
+  void SetIsActual(bool state);
   bool HasChild(const std::string& name) const;
   bool HasLocalChild(const std::string& name) const;
   bool IsLocalChild(const std::string& name) const;
   bool IsChildOpened(const std::string& name) const;
-  DObjInfo GetChildInfo(const std::string& name) const;
+  DObjInfo ChildInfo(const std::string& name) const;
   std::vector<DObjInfo> Children() const;
   size_t ChildCount() const;
   bool IsFlattened() const;
@@ -193,6 +193,15 @@ class ObjectData::Impl {
   void AddBase(const DObjectSp& base);
   std::vector<DObjectSp> BaseObjects() const;
   void RemoveBase(const DObjectSp& base);
+
+  void AddBaseFromParent(const DObjectSp& base);
+  std::vector<DObjectSp> BaseObjectsFromParent() const;
+  void RemoveBaseFromParent(const DObjectSp& base);
+
+  std::vector<DObjectSp> EffectiveBases() const;
+
+  void UpdateEffectiveBaseList();
+  void InstanciateBases(std::vector<BaseObjInfo>& base_info_list) const;
 
   boost::signals2::connection AddListener(
       const ObjectListenerFunc& listener, ListenerCallPoint call_point);
@@ -267,6 +276,8 @@ class ObjectData::Impl {
   mutable std::vector<DObjInfo> children_;
 
   mutable std::vector<BaseObjInfo> base_info_list_;
+  mutable std::vector<BaseObjInfo> base_info_from_parent_list_;
+  mutable std::vector<BaseObjInfo*> effective_base_info_list_;
   std::unordered_map<std::string, bool> child_flat_flags_;
   std::unique_ptr<boost::interprocess::file_lock> lock_file_;
   std::array<boost::signals2::signal<void (const Command&)>,
@@ -278,6 +289,7 @@ class ObjectData::Impl {
   int ref_count_ = 0;
   bool dirty_ = false;
   bool signal_enabled_ = true;
+  bool is_actual_ = false;
   DObjPath add_child_top_;
 };
 
@@ -317,8 +329,8 @@ ObjectData::Impl::Impl(ObjectData* self,
     
 ObjectData::Impl::~Impl() {
   RemoveLockFile();
-  for (auto& base_info : base_info_list_)
-    for (auto& connection : base_info.connections)
+  for (auto& base_info : effective_base_info_list_)
+    for (auto& connection : base_info->connections)
       connection.disconnect();
 }
 
@@ -333,7 +345,10 @@ struct HasKeyFuncInfo {
 bool ObjectData::Impl::HasKey(const std::string& key) const {
   if (IsLocal(key))
     return true;
-  return ExecInObjWithKey<bool>(base_info_list_, HasKeyFuncInfo(key, owner_));
+  InstanciateBases(base_info_list_);
+  InstanciateBases(base_info_from_parent_list_);
+  return ExecInObjWithKey<bool>(
+      effective_base_info_list_, HasKeyFuncInfo(key, owner_));
 }
 
 struct GetWithDefaultFuncInfo {
@@ -352,8 +367,11 @@ DValue ObjectData::Impl::Get(const std::string& key,
   auto itr = values_.find(key);
   if (itr != values_.cend())
     return itr->second;
+  InstanciateBases(base_info_list_);
+  InstanciateBases(base_info_from_parent_list_);
   return ExecInObjWithKey<DValue>(
-      base_info_list_, GetWithDefaultFuncInfo(key, default_value, owner_));
+      effective_base_info_list_,
+      GetWithDefaultFuncInfo(key, default_value, owner_));
 }
 
 struct GetFuncInfo {
@@ -373,8 +391,10 @@ DValue ObjectData::Impl::Get(const std::string& key) const {
   auto itr = values_.find(key);
   if (itr != values_.cend())
     return itr->second;
+  InstanciateBases(base_info_list_);
+  InstanciateBases(base_info_from_parent_list_);
   return ExecInObjWithKey<DValue>(
-      base_info_list_, GetFuncInfo(key, Path(), owner_));
+      effective_base_info_list_, GetFuncInfo(key, Path(), owner_));
 }
 
 void ObjectData::Impl::Put(const std::string& key, const DValue& value) {
@@ -422,8 +442,10 @@ struct WhereFuncInfo {
 DObjPath ObjectData::Impl::Where(const std::string& key) const {
   if (IsLocal(key))
     return Path();
+  InstanciateBases(base_info_list_);
+  InstanciateBases(base_info_from_parent_list_);
   return ExecInObjWithKey<DObjPath>(
-      base_info_list_, WhereFuncInfo(key, Path(), owner_));
+      effective_base_info_list_, WhereFuncInfo(key, Path(), owner_));
 }
 
 std::vector<std::string> ObjectData::Impl::Keys(bool local_only) const {
@@ -431,7 +453,7 @@ std::vector<std::string> ObjectData::Impl::Keys(bool local_only) const {
   for (auto& kv : values_)
     keys.insert(kv.first);
   if (!local_only)
-    for (auto& base : BaseObjects())
+    for (auto& base : EffectiveBases())
       for (auto& key : base->Keys(false))
         keys.insert(key);
   std::vector<std::string> result;
@@ -450,6 +472,14 @@ FsPath ObjectData::Impl::DirPath() const {
 
 DObjPath ObjectData::Impl::Path() const {
   return obj_path_;
+}
+
+bool ObjectData::Impl::IsActual() const {
+  return is_actual_;
+}
+
+void ObjectData::Impl::SetIsActual(bool state) {
+  is_actual_ = state;
 }
 
 bool ObjectData::Impl::HasChild(const std::string& name) const {
@@ -489,7 +519,7 @@ bool ObjectData::Impl::IsChildOpened(const std::string& name) const {
   return owner_->IsOpened(itr->Path());
 }
 
-DObjInfo ObjectData::Impl::GetChildInfo(const std::string& name) const {
+DObjInfo ObjectData::Impl::ChildInfo(const std::string& name) const {
   auto itr = std::find_if(
       children_.cbegin(),
       children_.cend(),
@@ -620,7 +650,7 @@ void ObjectData::Impl::DeleteChild(const std::string& name) {
     BOOST_THROW_EXCEPTION(
         ObjectDataException(kErrChildNotExist)
         << ExpInfo1(name) << ExpInfo2(Path().String()));
-  auto child_info = GetChildInfo(name);
+  auto child_info = ChildInfo(name);
   Executer()->UpdateChildList(
       CommandType::kDelete, self_, name, child_info.Type(), IsChildFlat(name));
 }
@@ -780,6 +810,7 @@ void ObjectData::Impl::AddBase(const DObjectSp& base) {
 
 std::vector<DObjectSp> ObjectData::Impl::BaseObjects() const {
   std::vector<DObjectSp> objects;
+  InstanciateBases(base_info_list_);
   std::transform(
       base_info_list_.cbegin(), base_info_list_.cend(),
       std::back_inserter(objects), [](auto& info) { return info.obj; });
@@ -787,6 +818,7 @@ std::vector<DObjectSp> ObjectData::Impl::BaseObjects() const {
 }
 
 void ObjectData::Impl::RemoveBase(const DObjectSp& base) {
+  InstanciateBases(base_info_list_);
   auto path = base->Path();
   auto itr = std::find_if(
       base_info_list_.begin(), base_info_list_.end(),
@@ -796,6 +828,119 @@ void ObjectData::Impl::RemoveBase(const DObjectSp& base) {
         ObjectDataException(kErrNotBaseObject)
         << ExpInfo1(base->Path().String()) << ExpInfo2(Path().String()));
   Executer()->UpdateBaseObjectList(CommandType::kDelete, self_, base);
+}
+
+void ObjectData::Impl::AddBaseFromParent(const DObjectSp& base) {
+  if (base->IsExpired())
+    BOOST_THROW_EXCEPTION(
+        ObjectDataException(kErrExpiredObjectToBase)
+        << ExpInfo1(base->Path().String()) << ExpInfo2(Path().String()));
+
+  auto itr = std::find_if(base_info_list_.cbegin(), base_info_list_.cend(),
+                          [&base](auto b) { return b.path == base->Path(); });
+  if (itr != base_info_list_.cend())
+    return;
+
+  auto prev_children = Children();
+  Command cmd(CommandType::kAddBaseObject, Path(),
+              "", nil, nil, base->Path(), "", prev_children);
+  EmitSignal(cmd, ListenerCallPoint::kPre);
+  BaseObjInfo base_info(base->Path(), base);
+  base_info.connections.push_back(
+      base->AddListener(
+          [this](const Command& cmd) {
+            ProcessBaseObjectUpdate(cmd, ListenerCallPoint::kPre); },
+          ListenerCallPoint::kPost));
+  base_info.connections.push_back(
+      base->AddListener(
+          [this](const Command& cmd) {
+            ProcessBaseObjectUpdate(cmd, ListenerCallPoint::kPost); },
+          ListenerCallPoint::kPost));
+  base_info_from_parent_list_.push_back(base_info);
+  UpdateEffectiveBaseList();
+  RefreshChildrenInBase();
+  SetDirty(true);
+  EmitSignal(cmd, ListenerCallPoint::kPost);
+  for (auto& child_info : local_children_) {
+    if (base->HasChild(child_info.Name())) {
+      auto child_of_base = base->OpenChildObject(child_info.Name());
+      OpenChildObject(
+          child_info.Name())->GetData()->AddBaseFromParent(child_of_base);
+    }
+  }
+}
+
+std::vector<DObjectSp> ObjectData::Impl::BaseObjectsFromParent() const {
+  std::vector<DObjectSp> objects;
+  InstanciateBases(base_info_from_parent_list_);
+  std::transform(
+      base_info_from_parent_list_.cbegin(),
+      base_info_from_parent_list_.cend(),
+      std::back_inserter(objects), [](auto& info) { return info.obj; });
+  return objects;
+}
+
+void ObjectData::Impl::RemoveBaseFromParent(const DObjectSp& base) {
+  auto path = base->Path();
+  auto itr = std::find_if(
+      base_info_from_parent_list_.begin(),
+      base_info_from_parent_list_.end(),
+      [&path](auto& info) { return info.obj->Path() == path; });
+  if (itr == base_info_list_.end())
+    BOOST_THROW_EXCEPTION(
+        ObjectDataException(kErrNotBaseObject)
+        << ExpInfo1(base->Path().String()) << ExpInfo2(Path().String()));
+
+  auto prev_children = Children();
+  Command cmd(CommandType::kRemoveBaseObject, Path(),
+              "", nil, nil, path, "", prev_children);
+  EmitSignal(cmd, ListenerCallPoint::kPre);
+  for (auto& connection : itr->connections)
+    connection.disconnect();
+  base_info_from_parent_list_.erase(itr, base_info_from_parent_list_.end());
+  UpdateEffectiveBaseList();
+  RefreshChildrenInBase();
+  EmitSignal(cmd, ListenerCallPoint::kPost);
+}
+
+void ObjectData::Impl::UpdateEffectiveBaseList() {
+  effective_base_info_list_.clear();
+  for (auto& base_info : base_info_list_)
+    effective_base_info_list_.push_back(&base_info);
+  for (auto& base_info : base_info_from_parent_list_)
+    effective_base_info_list_.push_back(&base_info);
+}
+
+void ObjectData::Impl::InstanciateBases(
+    std::vector<BaseObjInfo>& base_info_list) const {
+  for (auto& base_info : base_info_list) {
+    if (!base_info.obj || base_info.obj->IsExpired()) {
+      auto base = owner_->OpenObject(base_info.path);
+      base_info.obj = base;
+      base_info.connections.push_back(
+          base->AddListener(
+              [this](const Command& cmd) {
+                const_cast<ObjectData::Impl*>(this)->ProcessBaseObjectUpdate(
+                    cmd, ListenerCallPoint::kPre); },
+              ListenerCallPoint::kPre));
+      base_info.connections.push_back(
+          base->AddListener(
+              [this](const Command& cmd) {
+                const_cast<ObjectData::Impl*>(this)->ProcessBaseObjectUpdate(
+                    cmd, ListenerCallPoint::kPost); },
+              ListenerCallPoint::kPost));
+    }
+  }
+}
+
+std::vector<DObjectSp> ObjectData::Impl::EffectiveBases() const {
+  std::vector<DObjectSp> objects;
+  InstanciateBases(base_info_list_);
+  InstanciateBases(base_info_from_parent_list_);
+  std::transform(
+      effective_base_info_list_.cbegin(), effective_base_info_list_.cend(),
+      std::back_inserter(objects), [](auto& info) { return info->obj; });
+  return objects;
 }
 
 boost::signals2::connection ObjectData::Impl::AddListener(
@@ -866,6 +1011,7 @@ FsPath ObjectData::Impl::LockFilePath() const {
 void ObjectData::Impl::ExecUpdateValue(const std::string& key,
                                        const DValue& new_value,
                                        const DValue& prev_value) {
+  is_actual_ = true;
   Command cmd(CommandType::kValueUpdate, Path(),
               key, new_value, prev_value, DObjPath(), "", {});
   EmitSignal(cmd, ListenerCallPoint::kPre);
@@ -876,6 +1022,7 @@ void ObjectData::Impl::ExecUpdateValue(const std::string& key,
 
 void ObjectData::Impl::ExecRemoveValue(const std::string& key,
                                        const DValue& prev_value) {
+  is_actual_ = true;
   Command cmd(CommandType::kValueDelete, Path(),
               key, nil, prev_value, DObjPath(), "", {});
   EmitSignal(cmd, ListenerCallPoint::kPre);
@@ -886,6 +1033,7 @@ void ObjectData::Impl::ExecRemoveValue(const std::string& key,
 
 void ObjectData::Impl::ExecAddValue(const std::string& key,
                                     const DValue& new_value) {
+  is_actual_ = true;
   Command cmd(CommandType::kValueAdd, Path(),
               key, new_value, nil, DObjPath(), "", {});
   EmitSignal(cmd, ListenerCallPoint::kPre);
@@ -896,7 +1044,7 @@ void ObjectData::Impl::ExecAddValue(const std::string& key,
 
 void ObjectData::Impl::ExecDeleteChild(const std::string& name) {
   auto prev_children = children_;
-  auto child_info = GetChildInfo(name);
+  auto child_info = ChildInfo(name);
   auto is_flat_child = IsChildFlat(name);
   Command cmd(CommandType::kDeleteChild, Path(), "", nil, nil,
               child_info.Path(), child_info.Type(), prev_children);
@@ -916,6 +1064,7 @@ void ObjectData::Impl::ExecDeleteChild(const std::string& name) {
 }
 
 void ObjectData::Impl::ExecAddBase(const DObjectSp& base) {
+  is_actual_ = true;
   auto prev_children = Children();
   Command cmd(CommandType::kAddBaseObject, Path(),
               "", nil, nil, base->Path(), "", prev_children);
@@ -933,24 +1082,27 @@ void ObjectData::Impl::ExecAddBase(const DObjectSp& base) {
           ListenerCallPoint::kPost));
 
   base_info_list_.push_back(base_info);
+  UpdateEffectiveBaseList();
   RefreshChildrenInBase();
   SetDirty(true);
   EmitSignal(cmd, ListenerCallPoint::kPost);
 }
 
 void ObjectData::Impl::ExecRemoveBase(const DObjectSp& base) {
+  is_actual_ = true;
   auto prev_children = Children();
   auto path = base->Path();
   Command cmd(CommandType::kRemoveBaseObject, Path(),
-              "", nil, nil, base->Path(), "", prev_children);
+              "", nil, nil, path, "", prev_children);
   EmitSignal(cmd, ListenerCallPoint::kPre);
   auto itr = std::remove_if(
       base_info_list_.begin(), base_info_list_.end(),
       [&path](auto& info) { return info.obj->Path() == path; });
   
-  for (auto connection : itr->connections)
+  for (auto& connection : itr->connections)
     connection.disconnect();
   base_info_list_.erase(itr, base_info_list_.end());
+  UpdateEffectiveBaseList();
   RefreshChildrenInBase();
   SetDirty(true);
   EmitSignal(cmd, ListenerCallPoint::kPost);
@@ -1004,6 +1156,7 @@ void ObjectData::Impl::Load() {
   std::swap(values_, values);
   std::swap(attrs_, attrs);
   RestoreBaseFromDict(attrs_, base_info_list_);
+  UpdateEffectiveBaseList();
   std::vector<DObjPath> registered_paths;
   for (auto descendant : descendants) {
     try {
@@ -1071,10 +1224,10 @@ void ObjectData::Impl::RefreshChildrenInBase() const {
   children_.clear();
   children_.insert(children_.begin(),
                    local_children_.cbegin(), local_children_.cend());
-  for (auto& base_info : base_info_list_) {
-    if (!base_info.obj || base_info.obj->IsExpired())
-      base_info.obj = owner_->OpenObject(base_info.path);
-    for (auto base_child : base_info.obj->Children()) {
+  InstanciateBases(base_info_list_);
+  InstanciateBases(base_info_from_parent_list_);
+  for (auto& base_info : effective_base_info_list_) {
+    for (auto base_child : base_info->obj->Children()) {
       if (names.find(base_child.Name()) != names.cend())
         continue;
       names.insert(base_child.Name());
@@ -1170,6 +1323,7 @@ CreateChildFunc ObjectData::Impl::GenCreateChildFunc(
         &(data->impl_->attrs_),
         GenCreateChildFunc(data.get(), descendants));
     RestoreBaseFromDict(data->impl_->attrs_, data->impl_->base_info_list_);
+    data->impl_->UpdateEffectiveBaseList();
     return arg;
   };
   return f;
@@ -1241,6 +1395,10 @@ DObjPath ObjectData::Path() const {
   return impl_->Path();
 }
 
+bool ObjectData::IsActual() const {
+  return impl_->IsActual();
+}
+
 bool ObjectData::HasChild(const std::string& name) const {
   return impl_->HasChild(name);
 }
@@ -1259,6 +1417,10 @@ bool ObjectData::IsChildOpened(const std::string& name) const {
 
 std::vector<DObjInfo> ObjectData::Children() const {
   return impl_->Children();
+}
+
+DObjInfo ObjectData::ChildInfo(const std::string& name) const {
+  return impl_->ChildInfo(name);
 }
 
 size_t ObjectData::ChildCount() const {
@@ -1359,6 +1521,22 @@ void ObjectData::RemoveBase(const DObjectSp& base) {
   impl_->RemoveBase(base);
 }
 
+void ObjectData::AddBaseFromParent(const DObjectSp& base) {
+  impl_->AddBaseFromParent(base);
+}
+
+std::vector<DObjectSp> ObjectData::BaseObjectsFromParent() const {
+  return impl_->BaseObjectsFromParent();
+}
+
+void ObjectData::RemoveBaseFromParent(const DObjectSp& base) {
+  impl_->RemoveBaseFromParent(base);
+}
+
+std::vector<DObjectSp> ObjectData::EffectiveBases() const {
+  return impl_->EffectiveBases();
+}
+
 boost::signals2::connection ObjectData::AddListener(
     const ObjectListenerFunc& listener,  ListenerCallPoint call_point) {
   return impl_->AddListener(listener, call_point);
@@ -1419,6 +1597,7 @@ void ObjectData::ExecAddValue(const std::string& key,
 DObjectSp ObjectData::ExecCreateChild(const std::string& name,
                                       const std::string& type,
                                       bool is_flattened) {
+  impl_->SetIsActual(true);
   auto child_path = Path().ChildPath(name);
   auto prev_children = Children();
   Command cmd(CommandType::kAddChild, Path(),

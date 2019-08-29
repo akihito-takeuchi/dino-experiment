@@ -17,6 +17,7 @@ auto& nil = dc::nil;
 namespace {
 
 const std::string kWspFile = "dino.wsp";
+const std::string kWspFile2 = "dino2.wsp";
 const std::string kTopName1 = "top1";
 const std::string kTopName2 = "top2";
 const std::string kTopName3 = "top3";
@@ -36,6 +37,8 @@ class ObjectTest : public ::testing::Test {
   virtual void SetUp() {
     if (fs::exists(kWspFile))
       fs::remove(kWspFile);
+    if (fs::exists(kWspFile2))
+      fs::remove(kWspFile2);
     for (auto dir_name
              : {kTopName1, kTopName2, kTopName3, kTopName4,
                kTopName5, kTopName6, kTopName7,
@@ -506,5 +509,64 @@ TEST_F(ObjectTest, StoreArray) {
     ASSERT_EQ(values[2], false);
     ASSERT_EQ(values[3], std::string("test"));
     ASSERT_EQ(values[4], nil);
+  }
+}
+
+TEST_F(ObjectTest, DeepInheritance) {
+  // base object tree
+  // top1             : { "key1" : "value1", "key2" : 2, "key3" : nil }
+  //   +- child1      : { "key1" : "child1" }
+  //   |    +- child3 : { "key2" : 10.0 }
+  //   +- child2      : { "key3" : true }
+  {
+    auto session = dc::Session::Create(kWspFile2);
+    auto top = session->CreateTopLevelObject(kTopName1, kTopName1);
+    session->InitTopLevelObjectPath(kTopName1, kTopName1);
+    top->Put("key1", std::string("value1"));
+    top->Put("key2", 2);
+    top->Put("key3", nil);
+    auto c1 = top->CreateChild(kChildName1, kChildName1);
+    c1->Put("key1", std::string("child1"));
+    auto c2 = top->CreateChild(kChildName2, kChildName2);
+    c2->Put("key3", true);
+    auto c3 = c1->CreateChild(kChildName3, kChildName3);
+    c3->Put("key2", 10.0);
+    
+    top->Save();
+    c1->Save();
+    c2->Save();
+    c3->Save();
+    session->Save();
+  }
+  {
+    auto session = dc::Session::Open(kWspFile2);
+    auto top = session->GetObject(kTopName1);
+    ASSERT_EQ(top->Get("key1"), std::string("value1"));
+    ASSERT_EQ(top->Get("key2"), 2);
+    ASSERT_EQ(top->Get("key3"), nil);
+    ASSERT_EQ(top->ChildCount(), 2u);
+    ASSERT_EQ(top->Children()[0].Name(), kChildName1);
+    ASSERT_EQ(top->Children()[1].Name(), kChildName2);
+    auto c1 = top->OpenChildObject(kChildName1);
+    ASSERT_EQ(c1->Get("key1"), std::string("child1"));
+    auto c2 = top->OpenChildObject(kChildName2);
+    ASSERT_EQ(c2->Get("key3"), true);
+    auto c3 = c1->OpenChildObject(kChildName3);
+    ASSERT_EQ(c3->Get("key2"), 10.0);
+  }
+  {
+    auto session = dc::Session::Open(kWspFile2);
+    auto top = session->CreateTopLevelObject(kTopName2,kTopName2);
+    session->InitTopLevelObjectPath(kTopName2, kTopName2);
+    top->AddBase(session->GetObject(kTopName1));
+    ASSERT_EQ(top->ChildCount(), 2u);
+    auto c1 = top->OpenChildObject(kChildName1);
+    ASSERT_FALSE(c1->IsActual());
+    ASSERT_EQ(c1->Name(), std::string(kChildName1));
+    ASSERT_EQ(c1->Path(), dc::DObjPath(fmt::format("{}/{}", kTopName2, kChildName1)));
+    ASSERT_EQ(c1->Get("key1"), std::string("child1"));
+    
+    top->Save();
+    session->Save();
   }
 }
