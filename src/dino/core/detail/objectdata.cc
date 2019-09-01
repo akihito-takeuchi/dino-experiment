@@ -135,7 +135,8 @@ class ObjectData::Impl {
        const std::string& type,
        ObjectData* parent,
        Session* owner,
-       bool is_flattened);
+       bool is_flattened,
+       bool init_directory);
   Impl(ObjectData* self,
        const FsPath& dir_path,
        const DObjPath& obj_path,
@@ -197,10 +198,12 @@ class ObjectData::Impl {
   void AddBaseFromParent(const DObjectSp& base);
   std::vector<DObjectSp> BaseObjectsFromParent() const;
   void RemoveBaseFromParent(const DObjectSp& base);
+  bool HasObjectInBasesFromParent(const DObjPath& path) const;
 
   std::vector<DObjectSp> EffectiveBases() const;
 
   void UpdateEffectiveBaseList();
+  void InstanciateBases() const;
   void InstanciateBases(std::vector<BaseObjInfo>& base_info_list) const;
 
   boost::signals2::connection AddListener(
@@ -209,8 +212,9 @@ class ObjectData::Impl {
   void EnableSignal();
 
   void Load();
-  void Save();
+  void Save(bool recurse);
   void RefreshChildren();
+  ObjectData* FindTop() const;
 
   CommandStackSp EnableCommandStack(bool enable);
   ObjectData* FindAncestorWithCommandStack() const;
@@ -298,7 +302,8 @@ ObjectData::Impl::Impl(ObjectData* self,
                        const std::string& type,
                        ObjectData* parent,
                        Session* owner,
-                       bool is_flattened) :
+                       bool is_flattened,
+                       bool init_directory) :
     self_(self), parent_(parent), obj_path_(obj_path),
     type_(type), owner_(owner),
     default_command_executer_(new CommandExecuter(owner, self)) {
@@ -308,7 +313,8 @@ ObjectData::Impl::Impl(ObjectData* self,
       is_flattened = true;
     auto parent_dir_path = parent->DirPath();
     if (!is_flattened && !parent_dir_path.empty()) {
-      InitDirPath(parent_dir_path / obj_path_.LeafName());
+      if (init_directory)
+        InitDirPath(parent_dir_path / obj_path_.LeafName());
       RefreshLocalChildren();
     }
   }
@@ -345,8 +351,7 @@ struct HasKeyFuncInfo {
 bool ObjectData::Impl::HasKey(const std::string& key) const {
   if (IsLocal(key))
     return true;
-  InstanciateBases(base_info_list_);
-  InstanciateBases(base_info_from_parent_list_);
+  InstanciateBases();
   return ExecInObjWithKey<bool>(
       effective_base_info_list_, HasKeyFuncInfo(key, owner_));
 }
@@ -367,8 +372,7 @@ DValue ObjectData::Impl::Get(const std::string& key,
   auto itr = values_.find(key);
   if (itr != values_.cend())
     return itr->second;
-  InstanciateBases(base_info_list_);
-  InstanciateBases(base_info_from_parent_list_);
+  InstanciateBases();
   return ExecInObjWithKey<DValue>(
       effective_base_info_list_,
       GetWithDefaultFuncInfo(key, default_value, owner_));
@@ -391,8 +395,7 @@ DValue ObjectData::Impl::Get(const std::string& key) const {
   auto itr = values_.find(key);
   if (itr != values_.cend())
     return itr->second;
-  InstanciateBases(base_info_list_);
-  InstanciateBases(base_info_from_parent_list_);
+  InstanciateBases();
   return ExecInObjWithKey<DValue>(
       effective_base_info_list_, GetFuncInfo(key, Path(), owner_));
 }
@@ -442,8 +445,7 @@ struct WhereFuncInfo {
 DObjPath ObjectData::Impl::Where(const std::string& key) const {
   if (IsLocal(key))
     return Path();
-  InstanciateBases(base_info_list_);
-  InstanciateBases(base_info_from_parent_list_);
+  InstanciateBases();
   return ExecInObjWithKey<DObjPath>(
       effective_base_info_list_, WhereFuncInfo(key, Path(), owner_));
 }
@@ -810,7 +812,7 @@ void ObjectData::Impl::AddBase(const DObjectSp& base) {
 
 std::vector<DObjectSp> ObjectData::Impl::BaseObjects() const {
   std::vector<DObjectSp> objects;
-  InstanciateBases(base_info_list_);
+  InstanciateBases();
   std::transform(
       base_info_list_.cbegin(), base_info_list_.cend(),
       std::back_inserter(objects), [](auto& info) { return info.obj; });
@@ -818,7 +820,7 @@ std::vector<DObjectSp> ObjectData::Impl::BaseObjects() const {
 }
 
 void ObjectData::Impl::RemoveBase(const DObjectSp& base) {
-  InstanciateBases(base_info_list_);
+  InstanciateBases();
   auto path = base->Path();
   auto itr = std::find_if(
       base_info_list_.begin(), base_info_list_.end(),
@@ -872,7 +874,7 @@ void ObjectData::Impl::AddBaseFromParent(const DObjectSp& base) {
 
 std::vector<DObjectSp> ObjectData::Impl::BaseObjectsFromParent() const {
   std::vector<DObjectSp> objects;
-  InstanciateBases(base_info_from_parent_list_);
+  InstanciateBases();
   std::transform(
       base_info_from_parent_list_.cbegin(),
       base_info_from_parent_list_.cend(),
@@ -903,12 +905,24 @@ void ObjectData::Impl::RemoveBaseFromParent(const DObjectSp& base) {
   EmitSignal(cmd, ListenerCallPoint::kPost);
 }
 
+bool ObjectData::Impl::HasObjectInBasesFromParent(const DObjPath& path) const {
+  auto itr = std::find_if(base_info_from_parent_list_.cbegin(),
+                          base_info_from_parent_list_.cend(),
+                          [&path](auto& info) { return info.path == path; });
+  return itr != base_info_from_parent_list_.cend();
+}
+
 void ObjectData::Impl::UpdateEffectiveBaseList() {
   effective_base_info_list_.clear();
   for (auto& base_info : base_info_list_)
     effective_base_info_list_.push_back(&base_info);
   for (auto& base_info : base_info_from_parent_list_)
     effective_base_info_list_.push_back(&base_info);
+}
+
+void ObjectData::Impl::InstanciateBases() const {
+  InstanciateBases(base_info_list_);
+  InstanciateBases(base_info_from_parent_list_);
 }
 
 void ObjectData::Impl::InstanciateBases(
@@ -929,14 +943,23 @@ void ObjectData::Impl::InstanciateBases(
                 const_cast<ObjectData::Impl*>(this)->ProcessBaseObjectUpdate(
                     cmd, ListenerCallPoint::kPost); },
               ListenerCallPoint::kPost));
+      for (auto& child_info : local_children_) {
+        if (!base->HasChild(child_info.Name()))
+          continue;
+        auto base_child_path = base->Path().ChildPath(child_info.Name());
+        auto child_data = OpenChildObject(child_info.Name())->GetData();
+        if (child_data->impl_->HasObjectInBasesFromParent(base_child_path))
+          continue;
+        auto child_of_base = base->OpenChildObject(child_info.Name());
+        child_data->AddBaseFromParent(child_of_base);
+      }
     }
   }
 }
 
 std::vector<DObjectSp> ObjectData::Impl::EffectiveBases() const {
   std::vector<DObjectSp> objects;
-  InstanciateBases(base_info_list_);
-  InstanciateBases(base_info_from_parent_list_);
+  InstanciateBases();
   std::transform(
       effective_base_info_list_.cbegin(), effective_base_info_list_.cend(),
       std::back_inserter(objects), [](auto& info) { return info->obj; });
@@ -956,12 +979,42 @@ void ObjectData::Impl::EnableSignal() {
   signal_enabled_ = true;
 }
 
-void ObjectData::Impl::Save() {
+void ObjectData::Impl::Save(bool recurse) {
+  if (!is_actual_)
+    BOOST_THROW_EXCEPTION(
+        ObjectDataException(kErrObjectIsNotActual)
+        << ExpInfo1(obj_path_.String()));
+  if (dir_path_.empty() && parent_ && !IsFlattened()) {
+    auto cur_obj = FindTop();
+    auto cur_dir = cur_obj->DirPath();
+    auto remaining_path = obj_path_.Tail();
+    while (!remaining_path.Empty()) {
+      if (cur_obj->DirPath().empty())
+        break;
+      cur_obj = cur_obj->GetChildObject(remaining_path.TopName())->GetData();
+      cur_dir = cur_dir / remaining_path.TopName();
+      remaining_path = remaining_path.Tail();
+      if (cur_obj->IsFlattened())
+        break;
+      if (!cur_obj->DirPath().empty())
+        continue;
+      cur_obj->InitDirPath(cur_dir);
+    }
+  }
   auto io = DataIOFactory::Instance().Create(file_format_);
   auto file_path = DataFilePath();
   io->OpenForWrite(file_path);
   Save(io);
   io->CloseForWrite();
+  if (recurse) {
+    for (auto& child_info : local_children_) {
+      if (IsChildOpened(child_info.Name()) && !IsChildFlat(child_info.Name())) {
+        auto child = GetChildObject(child_info.Name())->GetData();
+        if (child->IsActual())
+          child->Save(recurse);
+      }
+    }
+  }
 }
 
 void ObjectData::Impl::Save(const std::unique_ptr<DataIO>& io) {
@@ -1168,6 +1221,8 @@ void ObjectData::Impl::Load() {
       throw;
     }
   }
+  if (effective_base_info_list_.size() > 0)
+    RefreshChildrenInBase();
   SetDirty(false);
 }
 
@@ -1224,8 +1279,7 @@ void ObjectData::Impl::RefreshChildrenInBase() const {
   children_.clear();
   children_.insert(children_.begin(),
                    local_children_.cbegin(), local_children_.cend());
-  InstanciateBases(base_info_list_);
-  InstanciateBases(base_info_from_parent_list_);
+  InstanciateBases();
   for (auto& base_info : effective_base_info_list_) {
     for (auto base_child : base_info->obj->Children()) {
       if (names.find(base_child.Name()) != names.cend())
@@ -1329,13 +1383,20 @@ CreateChildFunc ObjectData::Impl::GenCreateChildFunc(
   return f;
 }
 
+ObjectData* ObjectData::Impl::FindTop() const {
+  if (parent_)
+    return parent_->impl_->FindTop();
+  return self_;
+}
+
 ObjectData::ObjectData(const DObjPath& obj_path,
                        const std::string& type,
                        ObjectData* parent,
                        Session* owner,
-                       bool is_flattened) :
+                       bool is_flattened,
+                       bool init_directory) :
     impl_(std::make_unique<Impl>(
-        this, obj_path, type, parent, owner, is_flattened)) {
+        this, obj_path, type, parent, owner, is_flattened, init_directory)) {
 }
 
 ObjectData::ObjectData(const FsPath& dir_path,
@@ -1558,8 +1619,8 @@ CommandStackSp ObjectData::GetCommandStack() const {
   return impl_->GetCommandStack();
 }
 
-void ObjectData::Save() {
-  impl_->Save();
+void ObjectData::Save(bool recurse) {
+  impl_->Save(recurse);
 }
 
 void ObjectData::RefreshChildren() {
@@ -1632,9 +1693,11 @@ DataSp ObjectData::Create(const DObjPath& obj_path,
                           const std::string& type,
                           ObjectData* parent,
                           Session* owner,
-                          bool is_flattened) {
+                          bool is_flattened,
+                          bool init_directory) {
   auto data = std::shared_ptr<ObjectData>(
-      new ObjectData(obj_path, type, parent, owner, is_flattened));
+      new ObjectData(obj_path, type, parent, owner,
+                     is_flattened, init_directory));
   if (parent && parent->IsFlattened()) {
     parent->impl_->SetChildFlat(obj_path.LeafName(), true);
     parent->SetDirty(true);
@@ -1654,8 +1717,12 @@ DataSp ObjectData::Open(const DObjPath& obj_path,
         << ExpInfo1(dir_path.string()));
   auto data = std::shared_ptr<ObjectData>(new ObjectData(
       dir_path, obj_path, file_info.Type(), parent, owner));
-  data->impl_->Load();
   return data;
+}
+
+void ObjectData::Load() {
+  impl_->Load();
+  impl_->SetIsActual(true);
 }
 
 ObjectData* ObjectData::GetDataAt(const DObjPath& obj_path) {

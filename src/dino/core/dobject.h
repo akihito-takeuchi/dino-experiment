@@ -33,6 +33,7 @@ class DObject {
   bool HasKey(const std::string& key) const;
   DValue Get(const std::string& key, const DValue& default_value) const;
   DValue Get(const std::string& key) const;
+  void Put(const std::string& key, const char* str_value);
   void Put(const std::string& key, const DValue& value);
   void RemoveKey(const std::string& key);
   bool IsLocal(const std::string& key) const;
@@ -92,7 +93,7 @@ class DObject {
   CommandStackSp EnableCommandStack(bool enable = true);
   CommandStackSp GetCommandStack() const;
 
-  void Save();
+  void Save(bool recurse = false);
 
   ConstSessionPtr GetSession() const;
 

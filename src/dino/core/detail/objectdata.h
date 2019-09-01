@@ -100,7 +100,7 @@ class ObjectData {
   CommandStackSp EnableCommandStack(bool enable);
   CommandStackSp GetCommandStack() const;
 
-  void Save();
+  void Save(bool recurse);
   void RefreshChildren();
 
   void IncRef();
@@ -114,7 +114,8 @@ class ObjectData {
                        const std::string& type,
                        ObjectData* parent,
                        Session* owner,
-                       bool is_flattened);
+                       bool is_flattened,
+                       bool init_directory = true);
   static DataSp Open(const DObjPath& obj_path,
                      const FsPath& dir_path,
                      ObjectData* parent,
@@ -139,12 +140,15 @@ class ObjectData {
   void ExecAddBase(const DObjectSp& base);
   void ExecRemoveBase(const DObjectSp& base);
 
+  void Load();
+
  private:
   ObjectData(const DObjPath& obj_path,
              const std::string& type,
              ObjectData* parent,
              Session* owner,
-             bool is_flattened = false);
+             bool is_flattened = false,
+             bool init_directory = true);
   ObjectData(const FsPath& dir_path,
              const DObjPath& obj_path,
              const std::string& type,

@@ -97,6 +97,10 @@ DValue DObject::Get(const std::string& key) const {
   return impl_->GetRawData()->Get(key);
 }
 
+void DObject::Put(const std::string& key, const char* str_value) {
+  Put(key, DValue(std::string(str_value)));
+}
+
 void DObject::Put(const std::string& key, const DValue& value) {
   REQUIRE_EDITABLE();
   impl_->GetRawData()->Put(key, value);
@@ -118,7 +122,6 @@ DObjPath DObject::Where(const std::string& key) const {
 std::vector<std::string> DObject::Keys(bool local_only) const {
   return impl_->GetRawData()->Keys(local_only);
 }
-
 
 std::string DObject::Name() const {
   return impl_->Name();
@@ -295,12 +298,12 @@ CommandStackSp DObject::GetCommandStack() const {
   return impl_->GetRawData()->GetCommandStack();
 }
 
-void DObject::Save() {
+void DObject::Save(bool recurse) {
   if (!impl_->IsEditable())
     BOOST_THROW_EXCEPTION(
         DObjectException(kErrObjectIsNotEditable)
         << ExpInfo1(Name()));
-  impl_->GetRawData()->Save();
+  impl_->GetRawData()->Save(recurse);
 }
 
 ConstSessionPtr DObject::GetSession() const {

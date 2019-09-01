@@ -87,6 +87,7 @@ extern const int kErrFailedToCreateDirectory;
 extern const int kErrFailedToOpenWorkspaceFile;
 extern const int kErrWorkspaceFileError;
 extern const int kErrWorkspaceFilePathNotSet;
+extern const int kErrTopObjectDoesNotExist;
 extern const int kErrObjectExpired;
 extern const int kErrObjectIsNotEditable;
 extern const int kErrInvalidObjectString;

@@ -53,6 +53,8 @@ extern const int kErrWorkspaceFileError = RegisterErrorCode(
     116, "Error in workspace file '{}' -> {}", 2);
 extern const int kErrWorkspaceFilePathNotSet = RegisterErrorCode(
     117, "Workspace file path has not been set.", 0);
+extern const int kErrTopObjectDoesNotExist = RegisterErrorCode(
+    118, "The top level object '{}' does not exist", 1);
 
 extern const int kErrObjectExpired = RegisterErrorCode(
     200, "The object handle '{}' already expired", 1);

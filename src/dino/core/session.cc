@@ -65,10 +65,12 @@ std::string GetRjStringValue(const rj::Value& entry, const char* key) {
 class Session::Impl {
  public:
   struct TopObjPathInfo {
-    TopObjPathInfo(const std::string& name, const FsPath& path)
-        : name(name), path(path) {}
+    TopObjPathInfo(
+        const std::string& name, const FsPath& path, const FsPath& abs_path)
+        : name(name), path(path), abs_path(abs_path) {}
     std::string name;
     FsPath path;
+    FsPath abs_path;
   };
 
   using TopObjPathVector = std::vector<std::shared_ptr<TopObjPathInfo>>;
@@ -81,7 +83,8 @@ class Session::Impl {
   void SetWorkspaceFilePath(const FsPath& file_path);
   void AddTopLevelObjectPath(const std::string& name,
                              const FsPath& dir_path,
-                             bool is_local);
+                             bool is_local,
+                             FsPath abs_path = FsPath());
   void RemoveTopLevelObjectPath(const std::string& name);
   std::shared_ptr<TopObjPathInfo> FindTopObjPathInfo(
       const std::string& name) const;
@@ -109,11 +112,13 @@ class Session::Impl {
   DObjectSp GetObject(uintptr_t object_id) const;
   void PreNewObjectCheck(const DObjPath& obj_path) const;
   void PreOpenObjectCheck(const DObjPath& obj_path,
-                          const FsPath& dir_path = FsPath()) const;
+                          const FsPath& dir_path = FsPath(),
+                          bool need_top_dir_path = true) const;
   DObjectSp MakeObject(const DObjPath& obj_path) const;
   DObjectSp MakeDefaultObject(const DObjPath& obj_path) const;
   DObjectSp OpenTopLevelObject(const FsPath& dir_path,
                                const std::string& name);
+  void OpenDataAtPath(const DObjPath& path, const FsPath& top_dir);
   DObjectSp OpenObject(const DObjPath& obj_path);
   void DeleteObjectImpl(const DObjPath& obj_path);
   void PurgeObject(const DObjPath& obj_path, bool check_existence = true);
@@ -141,8 +146,11 @@ void Session::Impl::SetWorkspaceFilePath(const FsPath& file_path) {
 
 void Session::Impl::AddTopLevelObjectPath(const std::string& name,
                                           const FsPath& dir_path,
-                                          bool is_local) {
-  auto obj_info = std::make_shared<TopObjPathInfo>(name, dir_path);
+                                          bool is_local,
+                                          FsPath abs_path) {
+  if (abs_path.empty())
+    abs_path = fs::absolute(dir_path);
+  auto obj_info = std::make_shared<TopObjPathInfo>(name, dir_path, abs_path);
   object_paths_.emplace_back(obj_info);
   if (is_local)
     local_object_paths_.emplace_back(obj_info);
@@ -182,22 +190,25 @@ void Session::Impl::ReadWorkspaceFile_(
     const FsPath& wsp_file_path, AddPathFuncType add_path_func) {
   auto doc = OpenJson(wsp_file_path);
   CheckWorkspaceFileError(wsp_file_path, doc);
-  auto arr = doc.GetArray();
-  auto itr = arr.Begin();
-  auto end_itr = arr.End();
-  for (; itr != end_itr; ++ itr) {
-    if (!itr->IsObject())
+  for (auto& obj : doc.GetArray()) {
+    if (!obj.IsObject())
       BOOST_THROW_EXCEPTION(
           SessionException(kErrWorkspaceFileError)
           << ExpInfo1(wsp_file_path.string())
           << ExpInfo2("The entries should be objects."));
-    auto type = GetRjStringValue(*itr, "type");
-    auto path = FsPath(GetRjStringValue(*itr, "path"));
+    auto type = GetRjStringValue(obj, "type");
+    auto path = FsPath(GetRjStringValue(obj, "path"));
     if (type == "object") {
-      auto name = GetRjStringValue(*itr, "name", "object");
+      auto name = GetRjStringValue(obj, "name", "object");
       try {
-        RegisterObjectData(
-            detail::ObjectData::Open(DObjPath(name), path, nullptr, self_));
+        auto file_info = detail::DataIOFactory::FindDataFileInfo(path);
+        if (!file_info.IsValid()) {
+          AddErrorMessage(
+              fmt::format(
+                  "Object path '{}' is not an object directory. "
+                  "Ignored object '{}'.", fs::absolute(path).string(), name));
+          continue;
+        }
         add_path_func(name, path);
       } catch (const DException& e) {
         AddErrorMessage(fmt::format(
@@ -305,8 +316,12 @@ void Session::Impl::PreNewObjectCheck(const DObjPath& obj_path) const {
     BOOST_THROW_EXCEPTION(
         SessionException(kErrObjectDataAlreadyExists) << name_info);
 
-  if (obj_path.IsTop())
+  if (obj_path.IsTop()) {
+    if (FindTopObjPathInfo(obj_path.TopName()))
+      BOOST_THROW_EXCEPTION(
+          SessionException(kErrObjectDataAlreadyExists) << name_info);
     return;
+  }
 
   DObjectSp parent_obj;
   try {
@@ -322,7 +337,9 @@ void Session::Impl::PreNewObjectCheck(const DObjPath& obj_path) const {
 }
 
 void Session::Impl::PreOpenObjectCheck(
-    const DObjPath& obj_path, const FsPath& dir_path) const {
+    const DObjPath& obj_path,
+    const FsPath& dir_path,
+    bool need_top_dir_path) const {
   if (obj_path.Empty())
     BOOST_THROW_EXCEPTION(SessionException(kErrObjectPathEmpty));
         
@@ -332,15 +349,28 @@ void Session::Impl::PreOpenObjectCheck(
         << ExpInfo1(obj_path.String()));
 
   if (!obj_path.IsTop()) {
-    if (!HasObjectData(obj_path.Top()))
+    if (!FindTopObjPathInfo(obj_path.TopName()))
       BOOST_THROW_EXCEPTION(
           SessionException(kErrTopLevelObjectNotExist)
           << ExpInfo1(obj_path.String()));
+    if (!HasObjectData(obj_path.Top()))
+      BOOST_THROW_EXCEPTION(
+          SessionException(kErrParentObjectNotOpened)
+          << ExpInfo1(obj_path.String()));
     if (!dir_path.empty())
       BOOST_THROW_EXCEPTION(SessionException(kErrDirPathForNonTop));
-    if (FindTopObjPathInfo(obj_path.TopName())->path.empty())
+    if (need_top_dir_path
+        && FindTopObjPathInfo(obj_path.TopName())->path.empty())
       BOOST_THROW_EXCEPTION(
           SessionException(kErrTopLevelObjectNotInitialized)
+          << ExpInfo1(obj_path.TopName()));
+  } else {
+    auto path_info = FindTopObjPathInfo(obj_path.TopName());
+    if (!path_info)
+      return;
+    if (path_info->abs_path != fs::absolute(dir_path))
+      BOOST_THROW_EXCEPTION(
+          SessionException(kErrObjectAlreadyExists)
           << ExpInfo1(obj_path.TopName()));
   }
 }
@@ -443,64 +473,78 @@ DObjectSp Session::Impl::OpenTopLevelObject(const FsPath& dir_path,
   PreOpenObjectCheck(obj_path, dir_path);
 
   try {
-    RegisterObjectData(
-        detail::ObjectData::Open(obj_path, dir_path, nullptr, self_));
-    AddTopLevelObjectPath(name, dir_path, true);
+    auto abs_path = fs::absolute(dir_path);
+    auto data = detail::ObjectData::Open(obj_path, abs_path, nullptr, self_);
+    RegisterObjectData(data);
+    data->Load();
+    AddTopLevelObjectPath(name, dir_path, true, abs_path);
     return MakeObject(obj_path);
   } catch (const DException& e) {
     throw SessionException(e);
   }
 }
 
-DObjectSp Session::Impl::OpenObject(const DObjPath& obj_path) {
-  if (obj_path.IsTop())
-    return OpenTopLevelObject(FsPath(obj_path.TopName()),
-                              obj_path.TopName());
+void Session::Impl::OpenDataAtPath(
+    const DObjPath& path, const FsPath& top_dir) {
+  auto parent_data = obj_data_map_[path.ParentPath()].get();
+  try {
+    auto data = detail::ObjectData::Open(
+        path, top_dir / path.Tail().String(),
+        parent_data, self_);
+    RegisterObjectData(data);
+    data->Load();
+  } catch (const DException&) {
+    auto name = path.LeafName();
+    auto obj_info = parent_data->ChildInfo(name);
+    if (!obj_info.IsValid())
+      BOOST_THROW_EXCEPTION(
+          SessionException(kErrObjectDoesNotExist)
+          << ExpInfo1(path.String()));
+    auto is_flattened = ObjectFactory::Instance().UpdateFlattenedFlag(
+        obj_info.Type(), false);
+    RegisterObjectData(detail::ObjectData::Create(
+        path, obj_info.Type(), parent_data, self_, is_flattened, false));
+    auto data = obj_data_map_[path];
+    for (auto& base_of_parent : parent_data->EffectiveBases()) {
+      if (base_of_parent->HasChild(name)) {
+        auto base = base_of_parent->OpenChildObject(name);
+        data->AddBaseFromParent(base);
+      }
+    }
+  }
+}
 
+DObjectSp Session::Impl::OpenObject(const DObjPath& obj_path) {
   if (HasObjectData(obj_path))
     return GetObject(obj_path);
 
+  if (obj_path.IsTop()) {
+    FsPath dir_path = FsPath(obj_path.TopName());
+    auto path_info = FindTopObjPathInfo(obj_path.TopName());
+    if (path_info)
+      dir_path = path_info->abs_path;
+    else
+      BOOST_THROW_EXCEPTION(
+          SessionException(kErrTopObjectDoesNotExist)
+          << ExpInfo1(obj_path.TopName()));
+    return OpenTopLevelObject(FsPath(obj_path.TopName()),
+                              obj_path.TopName());
+  }
+
+  PreOpenObjectCheck(obj_path, FsPath(), false);
+
   auto top_dir = FindTopObjPathInfo(obj_path.TopName())->path;
-  detail::DataSp parent;
   try {
-    // Find actual object data
     DObjPath current_path;
     DObjPath remaining_path(obj_path);
     while (remaining_path.Depth() > 1) {
       current_path = current_path.ChildPath(remaining_path.TopName());
       remaining_path = remaining_path.Tail();
-      if (!HasObjectData(current_path)) {
-        try {
-          RegisterObjectData(detail::ObjectData::Open(
-              current_path, top_dir / current_path.Tail().String(),
-              parent.get(), self_));
-        } catch (const DException&) {
-          auto name = current_path.LeafName();
-          auto parent_data = obj_data_map_[current_path.ParentPath()].get();
-          auto obj_info = parent_data->ChildInfo(name);
-          if (!obj_info.IsValid())
-            BOOST_THROW_EXCEPTION(
-                SessionException(kErrObjectDoesNotExist)
-                << ExpInfo1(current_path.String()));
-          auto is_flattened = ObjectFactory::Instance().UpdateFlattenedFlag(
-              obj_info.Type(), false);
-          RegisterObjectData(detail::ObjectData::Create(
-              current_path, obj_info.Type(), parent_data, self_, is_flattened));
-          auto data = obj_data_map_[current_path];
-          for (auto& base_of_parent : parent_data->EffectiveBases()) {
-            if (base_of_parent->HasChild(name)) {
-              auto base = base_of_parent->OpenChildObject(name);
-              data->AddBaseFromParent(base_of_parent);
-            }
-          }
-        }
-      }
-      parent = obj_data_map_[current_path];
+      if (!HasObjectData(current_path))
+        OpenDataAtPath(current_path, top_dir);
     }
     current_path = current_path.ChildPath(remaining_path.TopName());
-    RegisterObjectData(detail::ObjectData::Open(
-        current_path, top_dir / current_path.Tail().String(),
-        parent.get(), self_));
+    OpenDataAtPath(current_path, top_dir);
     return MakeObject(current_path);
   } catch (const DException& e) {
     throw SessionException(e);
