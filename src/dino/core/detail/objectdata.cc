@@ -980,7 +980,7 @@ void ObjectData::Impl::EnableSignal() {
 }
 
 void ObjectData::Impl::Save(bool recurse) {
-  if (!is_actual_)
+  if (!is_actual_ && EffectiveBases().size() > 0)
     BOOST_THROW_EXCEPTION(
         ObjectDataException(kErrObjectIsNotActual)
         << ExpInfo1(obj_path_.String()));
