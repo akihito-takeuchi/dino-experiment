@@ -115,7 +115,8 @@ class ObjectData {
                        ObjectData* parent,
                        Session* owner,
                        bool is_flattened,
-                       bool init_directory = true);
+                       bool init_directory = true,
+                       bool is_local = true);
   static DataSp Open(const DObjPath& obj_path,
                      const FsPath& dir_path,
                      ObjectData* parent,
@@ -148,7 +149,8 @@ class ObjectData {
              ObjectData* parent,
              Session* owner,
              bool is_flattened = false,
-             bool init_directory = true);
+             bool init_directory = true,
+             bool is_local = true);
   ObjectData(const FsPath& dir_path,
              const DObjPath& obj_path,
              const std::string& type,

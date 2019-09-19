@@ -41,6 +41,7 @@ class Session : public std::enable_shared_from_this<Session> {
   DObjectSp GetObject(uintptr_t object_id) const;
   bool IsOpened(const DObjPath& obj_path) const;
   void DeleteObject(const DObjPath& obj_path);
+  void RemoveTopLevelObject(const std::string& name, bool delete_files = false);
   FsPath WorkspaceFilePath() const;
   void ImportWorkspaceFile(const std::string& wsp_file_path);
   void ImportWorkspaceFile(const FsPath& wsp_file_path);

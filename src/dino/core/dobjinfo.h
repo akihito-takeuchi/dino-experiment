@@ -16,6 +16,8 @@ class DObjInfo {
   DObjInfo();
   DObjInfo(const DObjPath& path, const std::string& type, bool is_local = true);
   ~DObjInfo();
+  DObjInfo(const DObjInfo&) = default;
+  DObjInfo& operator=(const DObjInfo&) = default;
 
   DObjPath Path() const;
   void SetPath(const DObjPath &path);

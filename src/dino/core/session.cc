@@ -120,7 +120,7 @@ class Session::Impl {
                                const std::string& name);
   void OpenDataAtPath(const DObjPath& path, const FsPath& top_dir);
   DObjectSp OpenObject(const DObjPath& obj_path);
-  void DeleteObjectImpl(const DObjPath& obj_path);
+  void DeleteObjectImpl(const DObjPath& obj_path, bool delete_files = true);
   void PurgeObject(const DObjPath& obj_path, bool check_existence = true);
   void RegisterObjectData(const detail::DataSp& data);
   bool HasError();
@@ -503,7 +503,7 @@ void Session::Impl::OpenDataAtPath(
     auto is_flattened = ObjectFactory::Instance().UpdateFlattenedFlag(
         obj_info.Type(), false);
     RegisterObjectData(detail::ObjectData::Create(
-        path, obj_info.Type(), parent_data, self_, is_flattened, false));
+        path, obj_info.Type(), parent_data, self_, is_flattened, false, false));
     auto data = obj_data_map_[path];
     for (auto& base_of_parent : parent_data->EffectiveBases()) {
       if (base_of_parent->HasChild(name)) {
@@ -551,7 +551,8 @@ DObjectSp Session::Impl::OpenObject(const DObjPath& obj_path) {
   }
 }
 
-void Session::Impl::DeleteObjectImpl(const DObjPath& obj_path) {
+void Session::Impl::DeleteObjectImpl(const DObjPath& obj_path,
+                                     bool delete_files) {
   FsPath dir_to_remove;
   auto target_name = obj_path.LeafName();
   if (!obj_path.IsTop()) {
@@ -562,7 +563,7 @@ void Session::Impl::DeleteObjectImpl(const DObjPath& obj_path) {
       dir_to_remove = parent->DirPath() / target_name;
   } else {
     auto path_info = FindTopObjPathInfo(target_name);
-    if (path_info)
+    if (path_info && delete_files)
       dir_to_remove = path_info->path;
   }
   if (!dir_to_remove.empty()) {
@@ -703,6 +704,10 @@ void Session::DeleteObject(const DObjPath& obj_path) {
   auto parent = GetObject(obj_path.ParentPath());
   parent->SetEditable();
   parent->DeleteChild(obj_path.LeafName());
+}
+
+void Session::RemoveTopLevelObject(const std::string& name, bool delete_files) {
+  impl_->DeleteObjectImpl(name, delete_files);
 }
 
 void Session::DeleteObjectImpl(const DObjPath& obj_path) {

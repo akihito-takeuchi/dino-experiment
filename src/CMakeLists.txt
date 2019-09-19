@@ -35,4 +35,10 @@ if(enable-qt)
   target_link_libraries(dino_qt dino_core)
 
   qt5_use_modules(dino_qt Widgets)
+
+  install(
+    TARGETS dino_qt
+    EXPORT dino_qt_export
+    DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
 endif(enable-qt)

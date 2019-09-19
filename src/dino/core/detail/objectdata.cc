@@ -136,7 +136,8 @@ class ObjectData::Impl {
        ObjectData* parent,
        Session* owner,
        bool is_flattened,
-       bool init_directory);
+       bool init_directory,
+       bool is_local);
   Impl(ObjectData* self,
        const FsPath& dir_path,
        const DObjPath& obj_path,
@@ -303,12 +304,14 @@ ObjectData::Impl::Impl(ObjectData* self,
                        ObjectData* parent,
                        Session* owner,
                        bool is_flattened,
-                       bool init_directory) :
+                       bool init_directory,
+                       bool is_local) :
     self_(self), parent_(parent), obj_path_(obj_path),
     type_(type), owner_(owner),
-    default_command_executer_(new CommandExecuter(owner, self)) {
+    default_command_executer_(new CommandExecuter(owner, self)),
+    is_actual_(is_local) {
   if (parent) {
-    parent->AddChildInfo(DObjInfo(obj_path, type));
+    parent->AddChildInfo(DObjInfo(obj_path, type, is_local));
     if (parent->IsFlattened())
       is_flattened = true;
     auto parent_dir_path = parent->DirPath();
@@ -522,11 +525,12 @@ bool ObjectData::Impl::IsChildOpened(const std::string& name) const {
 }
 
 DObjInfo ObjectData::Impl::ChildInfo(const std::string& name) const {
+  auto children = Children();
   auto itr = std::find_if(
-      children_.cbegin(),
-      children_.cend(),
+      children.cbegin(),
+      children.cend(),
       [&](auto& c) { return c.Name() == name; });
-  if (itr == children_.cend())
+  if (itr == children.cend())
     return DObjInfo();
   return *itr;
 }
@@ -1286,6 +1290,7 @@ void ObjectData::Impl::RefreshChildrenInBase() const {
         continue;
       names.insert(base_child.Name());
       base_child.SetIsLocal(false);
+      base_child.SetPath(obj_path_.ChildPath(base_child.Name()));
       children_.emplace_back(base_child);
     }
   }
@@ -1394,9 +1399,11 @@ ObjectData::ObjectData(const DObjPath& obj_path,
                        ObjectData* parent,
                        Session* owner,
                        bool is_flattened,
-                       bool init_directory) :
+                       bool init_directory,
+                       bool is_local) :
     impl_(std::make_unique<Impl>(
-        this, obj_path, type, parent, owner, is_flattened, init_directory)) {
+        this, obj_path, type, parent, owner,
+        is_flattened, init_directory, is_local)) {
 }
 
 ObjectData::ObjectData(const FsPath& dir_path,
@@ -1694,10 +1701,11 @@ DataSp ObjectData::Create(const DObjPath& obj_path,
                           ObjectData* parent,
                           Session* owner,
                           bool is_flattened,
-                          bool init_directory) {
+                          bool init_directory,
+                          bool is_local) {
   auto data = std::shared_ptr<ObjectData>(
       new ObjectData(obj_path, type, parent, owner,
-                     is_flattened, init_directory));
+                     is_flattened, init_directory, is_local));
   if (parent && parent->IsFlattened()) {
     parent->impl_->SetChildFlat(obj_path.LeafName(), true);
     parent->SetDirty(true);

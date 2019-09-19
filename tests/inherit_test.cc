@@ -30,6 +30,21 @@ const std::string kChildName4 = "child4";
 
 }
 
+namespace dino {
+
+namespace core {
+
+std::ostream& operator<<(std::ostream& os, const DObjInfo& info) {
+  os << "DObjInfo(" << info.Name() << "," << info.Type() << ","
+     << info.Path().String() << "," << (info.IsValid() ? "valid" : "invalid") <<  ","
+     << (info.IsLocal() ? "local" : "remote") << ")\n";
+  return os;
+}
+
+}  // namespace core
+
+}  // namespace dino
+
 using StringVector = std::vector<std::string>;
 
 class InheritTest : public ::testing::Test {
@@ -515,8 +530,12 @@ TEST_F(InheritTest, DeepInheritance) {
     ASSERT_EQ(top->ChildCount(), 2u);
     ASSERT_EQ(children[0].Name(), kChildName1);
     ASSERT_EQ(children[1].Name(), kChildName2);
+    ASSERT_FALSE(children[0].IsLocal());
+    ASSERT_FALSE(children[1].IsLocal());
     auto c1 = top->OpenChildObject(kChildName1);
     ASSERT_FALSE(c1->IsActual());
+    ASSERT_EQ(top->ChildInfo(kChildName1), children[0]);
+    ASSERT_FALSE(top->ChildInfo(kChildName1).IsLocal());
     ASSERT_EQ(c1->Name(), std::string(kChildName1));
     ASSERT_EQ(c1->Path(), dc::DObjPath(fmt::format("{}/{}", kTopName2, kChildName1)));
     ASSERT_EQ(c1->Get("key1"), std::string("child1"));
@@ -528,8 +547,12 @@ TEST_F(InheritTest, DeepInheritance) {
     ASSERT_EQ(c3->ChildCount(), 0u);
     ASSERT_EQ(c3->Get("key2"), 10.0);
     c3->SetEditable();
+    ASSERT_FALSE(c3->IsActual());
+    ASSERT_FALSE(top->ChildInfo(kChildName3).IsLocal());
     c3->Put("key1", "test");
     c3->Put("key2", 5.0);
+    ASSERT_TRUE(top->ChildInfo(kChildName3).IsLocal());
+    ASSERT_TRUE(c3->IsActual());
     ASSERT_EQ(c3->Get("key1"), std::string("test"));
     ASSERT_EQ(c3->Get("key2"), 5.0);
     c3->Save();
@@ -539,6 +562,10 @@ TEST_F(InheritTest, DeepInheritance) {
     auto session = dc::Session::Open(kWspFile2);
     auto top = session->OpenObject(kTopName2);
     auto c1 = top->OpenChildObject(kChildName1);
+    ASSERT_EQ(top->ChildCount(), 2u);
+    auto children = top->Children();
+    ASSERT_TRUE(children[0].IsLocal());
+    ASSERT_FALSE(children[1].IsLocal());
     ASSERT_TRUE(c1->IsActual());
     ASSERT_EQ(c1->Name(), std::string(kChildName1));
     ASSERT_EQ(c1->Path(), dc::DObjPath(fmt::format("{}/{}", kTopName2, kChildName1)));
@@ -552,6 +579,22 @@ TEST_F(InheritTest, DeepInheritance) {
     top->SetEditable();
     top->RemoveBase(base);
     top->Save();
+  }
+  // Check data load after base removal
+  {
+    auto session = dc::Session::Open(kWspFile2);
+    auto top = session->OpenObject(kTopName2);
+    auto c1 = top->OpenChildObject(kChildName1);
+    ASSERT_EQ(top->ChildCount(), 1u);
+    ASSERT_TRUE(c1->IsActual());
+    ASSERT_EQ(c1->Name(), std::string(kChildName1));
+    ASSERT_EQ(c1->Path(), dc::DObjPath(fmt::format("{}/{}", kTopName2, kChildName1)));
+    ASSERT_FALSE(c1->HasKey("key1"));
+    ASSERT_EQ(c1->ChildCount(), 1u);
+    auto c3 = c1->OpenChildObject(kChildName3);
+    ASSERT_EQ(c3->ChildCount(), 0u);
+    ASSERT_EQ(c3->Get("key1"),std::string("test"));
+    ASSERT_EQ(c3->Get("key2"), 5.0);
   }
   // Need test to add base after creating some nodes
 }
