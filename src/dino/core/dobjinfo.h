@@ -36,7 +36,7 @@ class DObjInfo {
   DObjPath path_;
   std::string name_;
   std::string type_;
-  bool is_local_ = true;
+  bool is_local_ = false;
 };
 
 bool operator<(const DObjInfo& lhs, const DObjInfo& rhs);

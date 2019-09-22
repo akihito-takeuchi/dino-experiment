@@ -484,7 +484,31 @@ bool ObjectData::Impl::IsActual() const {
 }
 
 void ObjectData::Impl::SetIsActual(bool state) {
-  is_actual_ = state;
+  if (state != is_actual_ && parent_) {
+    auto name = obj_path_.LeafName();
+    auto itr = std::find_if(parent_->impl_->children_.begin(),
+                            parent_->impl_->children_.end(),
+                            [&name](auto& info) { return info.Name() == name; });
+    itr->SetIsLocal(state);
+    auto& local_children = parent_->impl_->local_children_;
+    if (state) {
+      if (!parent_->HasLocalChild(name)) {
+        local_children.push_back(*itr);
+        SortDObjInfoVector(local_children);
+      }
+      is_actual_ = true;
+      parent_->impl_->SetIsActual(true);
+    } else {
+      if (parent_->HasLocalChild(name)) {
+        local_children.erase(
+            std::find_if(local_children.cbegin(),
+                         local_children.cend(),
+                         [&name] (auto& info) { return info.Name() == name; }),
+            local_children.cend());
+      }
+      is_actual_ = false;
+    }
+  }
 }
 
 bool ObjectData::Impl::HasChild(const std::string& name) const {
@@ -1068,7 +1092,7 @@ FsPath ObjectData::Impl::LockFilePath() const {
 void ObjectData::Impl::ExecUpdateValue(const std::string& key,
                                        const DValue& new_value,
                                        const DValue& prev_value) {
-  is_actual_ = true;
+  SetIsActual(true);
   Command cmd(CommandType::kValueUpdate, Path(),
               key, new_value, prev_value, DObjPath(), "", {});
   EmitSignal(cmd, ListenerCallPoint::kPre);
@@ -1079,7 +1103,7 @@ void ObjectData::Impl::ExecUpdateValue(const std::string& key,
 
 void ObjectData::Impl::ExecRemoveValue(const std::string& key,
                                        const DValue& prev_value) {
-  is_actual_ = true;
+  SetIsActual(true);
   Command cmd(CommandType::kValueDelete, Path(),
               key, nil, prev_value, DObjPath(), "", {});
   EmitSignal(cmd, ListenerCallPoint::kPre);
@@ -1090,7 +1114,7 @@ void ObjectData::Impl::ExecRemoveValue(const std::string& key,
 
 void ObjectData::Impl::ExecAddValue(const std::string& key,
                                     const DValue& new_value) {
-  is_actual_ = true;
+  SetIsActual(true);
   Command cmd(CommandType::kValueAdd, Path(),
               key, new_value, nil, DObjPath(), "", {});
   EmitSignal(cmd, ListenerCallPoint::kPre);
@@ -1111,17 +1135,14 @@ void ObjectData::Impl::ExecDeleteChild(const std::string& name) {
       std::remove_if(local_children_.begin(), local_children_.end(),
                      [&name](auto& c) { return c.Name() == name; }),
       local_children_.end());
-  children_.erase(
-      std::remove_if(children_.begin(), children_.end(),
-                     [&name](auto& c) { return c.Name() == name; }),
-      children_.end());
+  RefreshChildrenInBase();
   if (is_flat_child)
     SetDirty(true);
   EmitSignal(cmd, ListenerCallPoint::kPost);
 }
 
 void ObjectData::Impl::ExecAddBase(const DObjectSp& base) {
-  is_actual_ = true;
+  SetIsActual(true);
   auto prev_children = Children();
   Command cmd(CommandType::kAddBaseObject, Path(),
               "", nil, nil, base->Path(), "", prev_children);
@@ -1146,7 +1167,7 @@ void ObjectData::Impl::ExecAddBase(const DObjectSp& base) {
 }
 
 void ObjectData::Impl::ExecRemoveBase(const DObjectSp& base) {
-  is_actual_ = true;
+  SetIsActual(true);
   auto prev_children = Children();
   auto path = base->Path();
   Command cmd(CommandType::kRemoveBaseObject, Path(),
@@ -1219,6 +1240,7 @@ void ObjectData::Impl::Load() {
     try {
       owner_->RegisterObjectData(descendant);
       registered_paths.emplace_back(descendant->Path());
+      descendant->impl_->is_actual_ = true;
     } catch (const DException&) {
       for (auto registered_path : registered_paths)
         owner_->PurgeObject(registered_path);
@@ -1227,6 +1249,7 @@ void ObjectData::Impl::Load() {
   }
   if (effective_base_info_list_.size() > 0)
     RefreshChildrenInBase();
+  is_actual_ = true;
   SetDirty(false);
 }
 
