@@ -42,9 +42,10 @@ struct BaseObjInfo {
   BaseObjInfo() = default;
   BaseObjInfo(const DObjPath& p,
               const DObjectSp& o)
-      : path(p), obj(o) {}
+      : path(p), obj(o), is_valid(true) {}
   DObjPath path;
   DObjectSp obj;
+  bool is_valid = false;
   std::vector<boost::signals2::connection> connections;
 };
 
@@ -126,6 +127,27 @@ void SortDObjInfoVector(std::vector<DObjInfo>& obj_list) {
             [](const auto& a, const auto& b) { return a < b; });
 }
 
+BaseObjInfo __invalid_base_info;
+BaseObjInfo& FindBaseInfoByPath(std::vector<BaseObjInfo>& info_list,
+                                const DObjPath& path) {
+  auto itr = std::find_if(info_list.begin(),
+                          info_list.end(),
+                          [&path](auto& b) { return b.path == path; });
+  if (itr != info_list.end())
+    return *itr;
+  return __invalid_base_info;
+}
+BaseObjInfo* FindBaseInfoByPath(std::vector<BaseObjInfo*>& info_list,
+                                const DObjPath& path) {
+  auto itr = std::find_if(info_list.begin(),
+                          info_list.end(),
+                          [&path](auto& b) { return b->path == path; });
+  if (itr != info_list.end())
+    return *itr;
+  return &__invalid_base_info;
+}
+
+
 }  // namespace
 
 class ObjectData::Impl {
@@ -197,6 +219,8 @@ class ObjectData::Impl {
   void RemoveBase(const DObjectSp& base);
 
   void AddBaseFromParent(const DObjectSp& base);
+  void AddBaseToChildren(const DObjectSp& base);
+  void RemoveBaseFromChildren(const DObjPath& base_path);
   std::vector<DObjectSp> BaseObjectsFromParent() const;
   void RemoveBaseFromParent(const DObjectSp& base);
   bool HasObjectInBasesFromParent(const DObjPath& path) const;
@@ -311,7 +335,8 @@ ObjectData::Impl::Impl(ObjectData* self,
     default_command_executer_(new CommandExecuter(owner, self)),
     is_actual_(is_local) {
   if (parent) {
-    parent->AddChildInfo(DObjInfo(obj_path, type, is_local));
+    if (is_local)
+      parent->AddChildInfo(DObjInfo(obj_path, type, is_local));
     if (parent->IsFlattened())
       is_flattened = true;
     auto parent_dir_path = parent->DirPath();
@@ -866,9 +891,7 @@ void ObjectData::Impl::AddBaseFromParent(const DObjectSp& base) {
         ObjectDataException(kErrExpiredObjectToBase)
         << ExpInfo1(base->Path().String()) << ExpInfo2(Path().String()));
 
-  auto itr = std::find_if(base_info_list_.cbegin(), base_info_list_.cend(),
-                          [&base](auto b) { return b.path == base->Path(); });
-  if (itr != base_info_list_.cend())
+  if (FindBaseInfoByPath(base_info_from_parent_list_, base->Path()).is_valid)
     return;
 
   auto prev_children = Children();
@@ -876,19 +899,22 @@ void ObjectData::Impl::AddBaseFromParent(const DObjectSp& base) {
               "", nil, nil, base->Path(), "", prev_children);
   EmitSignal(cmd, ListenerCallPoint::kPre);
   BaseObjInfo base_info(base->Path(), base);
-  base_info.connections.push_back(
-      base->AddListener(
-          [this](const Command& cmd) {
-            ProcessBaseObjectUpdate(cmd, ListenerCallPoint::kPre); },
-          ListenerCallPoint::kPost));
-  base_info.connections.push_back(
-      base->AddListener(
-          [this](const Command& cmd) {
-            ProcessBaseObjectUpdate(cmd, ListenerCallPoint::kPost); },
-          ListenerCallPoint::kPost));
+  if (!FindBaseInfoByPath(base_info_list_, base->Path()).is_valid) {
+    base_info.connections.push_back(
+        base->AddListener(
+            [this](const Command& cmd) {
+              ProcessBaseObjectUpdate(cmd, ListenerCallPoint::kPre); },
+            ListenerCallPoint::kPost));
+    base_info.connections.push_back(
+        base->AddListener(
+            [this](const Command& cmd) {
+              ProcessBaseObjectUpdate(cmd, ListenerCallPoint::kPost); },
+            ListenerCallPoint::kPost));
+  }
   base_info_from_parent_list_.push_back(base_info);
   UpdateEffectiveBaseList();
   RefreshChildrenInBase();
+  AddBaseToChildren(base);
   SetDirty(true);
   EmitSignal(cmd, ListenerCallPoint::kPost);
   for (auto& child_info : local_children_) {
@@ -896,6 +922,38 @@ void ObjectData::Impl::AddBaseFromParent(const DObjectSp& base) {
       auto child_of_base = base->OpenChildObject(child_info.Name());
       OpenChildObject(
           child_info.Name())->GetData()->AddBaseFromParent(child_of_base);
+    }
+  }
+}
+
+void ObjectData::Impl::AddBaseToChildren(const DObjectSp& base) {
+  for (auto& child_info : Children()) {
+    if (!owner_->IsOpened(child_info.Path()))
+      continue;
+    if (!base->HasChild(child_info.Name()))
+      continue;
+    auto child = GetChildObject(child_info.Name());
+    auto base_child = base->OpenChildObject(child_info.Name());
+    child->GetData()->AddBaseFromParent(base_child);
+  }
+}
+
+void ObjectData::Impl::RemoveBaseFromChildren(const DObjPath& base_path) {
+  for (auto& child_info : Children()) {
+    if (!owner_->IsOpened(child_info.Path()))
+      continue;
+    auto child_data = GetChildObject(child_info.Name())->GetData();
+    auto child_base_path = base_path.ChildPath(child_info.Name());
+    child_data->impl_->RemoveBaseFromChildren(child_base_path);
+    auto& base_list = child_data->impl_->base_info_from_parent_list_;
+    auto itr = std::find_if(
+        base_list.begin(),
+        base_list.end(),
+        [&child_base_path](auto& info) { return info.path == child_base_path; });
+    if (itr != base_list.end()) {
+      base_list.erase(itr);
+      child_data->impl_->UpdateEffectiveBaseList();
+      child_data->impl_->RefreshChildrenInBase();
     }
   }
 }
@@ -945,7 +1003,8 @@ void ObjectData::Impl::UpdateEffectiveBaseList() {
   for (auto& base_info : base_info_list_)
     effective_base_info_list_.push_back(&base_info);
   for (auto& base_info : base_info_from_parent_list_)
-    effective_base_info_list_.push_back(&base_info);
+    if (!FindBaseInfoByPath(effective_base_info_list_, base_info.path)->is_valid)
+      effective_base_info_list_.push_back(&base_info);
 }
 
 void ObjectData::Impl::InstanciateBases() const {
@@ -1162,6 +1221,7 @@ void ObjectData::Impl::ExecAddBase(const DObjectSp& base) {
   base_info_list_.push_back(base_info);
   UpdateEffectiveBaseList();
   RefreshChildrenInBase();
+  AddBaseToChildren(base);
   SetDirty(true);
   EmitSignal(cmd, ListenerCallPoint::kPost);
 }
@@ -1169,19 +1229,25 @@ void ObjectData::Impl::ExecAddBase(const DObjectSp& base) {
 void ObjectData::Impl::ExecRemoveBase(const DObjectSp& base) {
   SetIsActual(true);
   auto prev_children = Children();
-  auto path = base->Path();
+  auto base_path = base->Path();
   Command cmd(CommandType::kRemoveBaseObject, Path(),
-              "", nil, nil, path, "", prev_children);
+              "", nil, nil, base_path, "", prev_children);
   EmitSignal(cmd, ListenerCallPoint::kPre);
   auto itr = std::remove_if(
       base_info_list_.begin(), base_info_list_.end(),
-      [&path](auto& info) { return info.obj->Path() == path; });
+      [&base_path](auto& info) { return info.obj->Path() == base_path; });
   
   for (auto& connection : itr->connections)
     connection.disconnect();
   base_info_list_.erase(itr, base_info_list_.end());
   UpdateEffectiveBaseList();
   RefreshChildrenInBase();
+  RemoveBaseFromChildren(base_path);
+  for (auto& prev_child : prev_children) {
+    if (!HasChild(prev_child.Name())
+        && owner_->IsOpened(Path().ChildPath(prev_child.Name())))
+      owner_->DeleteObjectImpl(Path().ChildPath(prev_child.Name()));
+  }
   SetDirty(true);
   EmitSignal(cmd, ListenerCallPoint::kPost);
 }
@@ -1331,8 +1397,34 @@ void ObjectData::Impl::ProcessBaseObjectUpdate(
     auto prev_children = children_;
     auto next_cmd_type = static_cast<CommandType>(
         edit_type | (cmd_type & k_command_group_mask));
-    if (call_point == ListenerCallPoint::kPost)
-      RefreshChildrenInBase();
+    if (call_point == ListenerCallPoint::kPost) {
+      auto target_name = cmd.TargetObjectName();
+      auto target_path = cmd.TargetObjectPath();
+      if (edit_type == static_cast<unsigned int>(CommandType::kAdd)) {
+        RefreshChildrenInBase();
+        if (IsChildOpened(target_name)) {
+          auto base_child = owner_->OpenObject(target_path);
+          auto child = GetChildObject(target_name);
+          child->GetData()->AddBaseFromParent(base_child);
+        }
+      } else if (edit_type == static_cast<unsigned int>(CommandType::kDelete)) {
+        if (IsChildOpened(target_name)) {
+          auto child_data = GetChildObject(target_name)->GetData();
+          child_data->impl_->RemoveBaseFromChildren(target_path);
+          auto& base_list = child_data->impl_->base_info_from_parent_list_;
+          auto itr = std::find_if(
+              base_list.cbegin(),
+              base_list.cend(),
+              [&target_path] (auto& b) { return b.path == target_path; });
+          base_list.erase(itr);
+        }
+        UpdateEffectiveBaseList();
+        RefreshChildrenInBase();
+        if (!HasChild(target_name)
+            && owner_->IsOpened(Path().ChildPath(target_name)))
+          owner_->DeleteObjectImpl(Path().ChildPath(target_name));
+      }
+    }
     EmitSignal(Command(next_cmd_type, Path(), "", nil, nil,
                        cmd.ObjPath(), "", prev_children), call_point);
     return;
@@ -1618,10 +1710,6 @@ void ObjectData::AddBaseFromParent(const DObjectSp& base) {
 
 std::vector<DObjectSp> ObjectData::BaseObjectsFromParent() const {
   return impl_->BaseObjectsFromParent();
-}
-
-void ObjectData::RemoveBaseFromParent(const DObjectSp& base) {
-  impl_->RemoveBaseFromParent(base);
 }
 
 std::vector<DObjectSp> ObjectData::EffectiveBases() const {

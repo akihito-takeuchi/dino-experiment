@@ -5,7 +5,6 @@
 
 #include <gtest/gtest.h>
 #include <boost/filesystem.hpp>
-
 #include "dino/core/session.h"
 #include "dino/core/dexception.h"
 
@@ -17,6 +16,7 @@ namespace {
 
 const std::string kWspFile = "dino.wsp";
 const std::string kWspFile2 = "dino2.wsp";
+const std::string kWspFile3 = "dino3.wsp";
 const std::string kTopName1 = "top1";
 const std::string kTopName2 = "top2";
 const std::string kTopName3 = "top3";
@@ -27,6 +27,7 @@ const std::string kChildName1 = "child1";
 const std::string kChildName2 = "child2";
 const std::string kChildName3 = "child3";
 const std::string kChildName4 = "child4";
+const std::string kChildName5 = "child5";
 
 }
 
@@ -55,6 +56,8 @@ class InheritTest : public ::testing::Test {
       fs::remove(kWspFile);
     if (fs::exists(kWspFile2))
       fs::remove(kWspFile2);
+    if (fs::exists(kWspFile3))
+      fs::remove(kWspFile3);
     for (auto dir_name
              : {kTopName1, kTopName2, kTopName3, kTopName4})
       if (fs::exists(dir_name))
@@ -541,6 +544,8 @@ TEST_F(InheritTest, DeepInheritance) {
     ASSERT_EQ(c1->Path(), dc::DObjPath(fmt::format("{}/{}", kTopName2, kChildName1)));
     ASSERT_EQ(c1->Get("key1"), std::string("child1"));
     ASSERT_EQ(c1->ChildCount(), 1u);
+    ASSERT_EQ(c1->BaseObjects().size(), 0u);
+    ASSERT_EQ(c1->EffectiveBases().size(), 1u);
     auto c2 = top->OpenChildObject(kChildName2);
     ASSERT_EQ(c2->ChildCount(), 0u);
     ASSERT_EQ(c2->Get("key3"), true);
@@ -598,8 +603,17 @@ TEST_F(InheritTest, DeepInheritance) {
     auto session = dc::Session::Open(kWspFile2);
     auto top = session->OpenObject(kTopName2);
     auto base = top->BaseObjects()[0];
+    auto c1 = top->OpenChildObject(kChildName1);
+    ASSERT_EQ(top->BaseObjects().size(), 1u);
+    ASSERT_EQ(top->EffectiveBases().size(), 1u);
+    ASSERT_EQ(c1->BaseObjects().size(), 0u);
+    ASSERT_EQ(c1->EffectiveBases().size(), 1u);
     top->SetEditable();
     top->RemoveBase(base);
+    ASSERT_EQ(top->BaseObjects().size(), 0u);
+    ASSERT_EQ(top->EffectiveBases().size(), 0u);
+    ASSERT_EQ(c1->BaseObjects().size(), 0u);
+    ASSERT_EQ(c1->EffectiveBases().size(), 0u);
     top->Save();
   }
   // Check data load after base removal
@@ -633,5 +647,114 @@ TEST_F(InheritTest, DeepInheritance) {
     auto c3 = c1->OpenChildObject(kChildName3);
     ASSERT_TRUE(c3->IsActual());
     ASSERT_EQ(c3->Get("key2"), 5.0);
+  }
+  // create another tree (top3) with actual c1 node, then inherit
+  {
+    auto session = dc::Session::Open(kWspFile2);
+    auto top = session->CreateTopLevelObject(kTopName3, kTopName3);
+    top->SetEditable();
+    session->InitTopLevelObjectPath(kTopName3, kTopName3);
+    auto c1 = top->CreateChild(kChildName1, kChildName1);
+    ASSERT_EQ(top->ChildCount(), 1u);
+    ASSERT_TRUE(c1->IsActual());
+    top->AddBase(session->OpenObject(kTopName1));
+    ASSERT_EQ(top->ChildCount(), 2u);
+    ASSERT_EQ(c1->ChildCount(), 1u);
+    ASSERT_EQ(c1->Get("key1"), std::string("child1"));
+    ASSERT_EQ(c1->BaseObjects().size(), 0u);
+    ASSERT_EQ(c1->EffectiveBases().size(), 1u);
+    top->Save(true);
+    session->Save();
+  }
+  // Reopen top3, test with child4 and child5
+  // top1             : { "key1" : "value1", "key2" : 2, "key3" : nil }
+  //   +- child1      : { "key1" : "child1" }
+  //   |    +- child3 : { "key2" : 10.0 }
+  //   |    +- child4 : { "key4" : "child4" }
+  //   |    +- child5 : {}
+  //   +- child2      : { "key3" : true }
+  {
+    auto session = dc::Session::Open(kWspFile2);
+    auto top = session->OpenObject(kTopName3);
+    auto c1 = top->OpenChildObject(kChildName1);
+    ASSERT_EQ(top->ChildCount(), 2u);
+    ASSERT_EQ(c1->ChildCount(), 1u);
+    ASSERT_EQ(c1->Get("key1"), std::string("child1"));
+    ASSERT_EQ(c1->EffectiveBases().size(), 1u);
+    c1->SetEditable();
+    auto c4 = c1->CreateChild(kChildName4, "test");
+    ASSERT_TRUE(c4->IsActual());
+    ASSERT_EQ(c4->EffectiveBases().size(), 0u);
+    auto base_top = top->BaseObjects()[0];
+    auto base_c1 = base_top->GetChildObject(kChildName1);
+    base_c1->SetEditable();
+    auto base_c4 = base_c1->CreateChild(kChildName4, "test");
+    base_c4->SetEditable();
+    base_c4->Put("key4", "child4");
+    ASSERT_EQ(c1->ChildCount(), 2u);
+    ASSERT_EQ(base_c4->Get("key4"), std::string("child4"));
+    ASSERT_TRUE(c4->HasKey("key4"));
+    ASSERT_EQ(c4->Get("key4"), std::string("child4"));
+    ASSERT_EQ(c4->EffectiveBases().size(), 1u);
+    base_c1->DeleteChild(kChildName4);
+    ASSERT_THROW(base_c4->Get("key4"), dc::DException);
+
+    auto base_c5 = base_c1->CreateChild(kChildName5, "test");
+    ASSERT_EQ(c1->ChildCount(), 3u);
+    auto c5 = c1->OpenChildObject(kChildName5);
+    ASSERT_FALSE(c5->IsActual());
+    base_c1->DeleteChild(kChildName5);
+    ASSERT_EQ(c1->ChildCount(), 2u);
+    ASSERT_THROW(c5->IsActual(), dc::DException);
+  }
+}
+
+TEST_F(InheritTest, DeepInheritance2) {
+  // base object tree
+  // top1                  : { "key1" : "value1", "key2" : 2, "key3" : nil }
+  //   +- child1           : { "key1" : "child1" }
+  //   |    +- child3      : { "key2" : 10.0 }
+  //   |         +- child4 : {}
+  //   |         +- child5 : {}
+  //   +- child2           : { "key3" : true }
+
+  // Create base tree
+  {
+    auto session = dc::Session::Create(kWspFile3);
+    auto top = session->CreateTopLevelObject(kTopName1, kTopName1);
+    session->InitTopLevelObjectPath(kTopName1, kTopName1);
+    top->Put("key1", std::string("value1"));
+    top->Put("key2", 2);
+    top->Put("key3", nil);
+    auto c1 = top->CreateChild(kChildName1, kChildName1);
+    c1->Put("key1", std::string("child1"));
+    auto c2 = top->CreateChild(kChildName2, kChildName2);
+    c2->Put("key3", true);
+    auto c3 = c1->CreateChild(kChildName3, kChildName3);
+    c3->Put("key2", 10.0);
+    auto c4 = c3->CreateChild(kChildName4, kChildName3);
+    auto c5 = c3->CreateChild(kChildName5, kChildName5);
+    top->Save();
+    c1->Save();
+    c2->Save();
+    c3->Save();
+    session->Save();
+  }
+  // Inherit and test
+  {
+    auto session = dc::Session::Open(kWspFile3);
+    auto top = session->CreateTopLevelObject(kTopName2, kTopName2);
+    session->InitTopLevelObjectPath(kTopName2, kTopName2);
+    auto base_top = session->OpenObject(kTopName1);
+    top->AddBase(base_top);
+    ASSERT_EQ(top->ChildCount(), 2u);
+    auto c1 = top->OpenChildObject(kChildName1);
+    ASSERT_EQ(c1->ChildCount(), 1u);
+    auto c3 = c1->OpenChildObject(kChildName3);
+    ASSERT_EQ(c3->ChildCount(), 2u);
+    top->RemoveBase(base_top);
+    ASSERT_EQ(top->ChildCount(), 0u);
+    ASSERT_THROW(c1->ChildCount(), dc::DException);
+    ASSERT_THROW(c3->ChildCount(), dc::DException);
   }
 }

@@ -88,7 +88,6 @@ class ObjectData {
 
   void AddBaseFromParent(const DObjectSp& base);
   std::vector<DObjectSp> BaseObjectsFromParent() const;
-  void RemoveBaseFromParent(const DObjectSp& base);
 
   std::vector<DObjectSp> EffectiveBases() const;
 
