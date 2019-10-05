@@ -606,10 +606,6 @@ bool ObjectData::Impl::IsChildFlat(const std::string& name) const {
 }
 
 void ObjectData::Impl::SetChildFlat(const std::string& name, bool flag_only) {
-  if (!HasLocalChild(name))
-    BOOST_THROW_EXCEPTION(
-        ObjectDataException(kErrChildNotExist)
-        << ExpInfo1(name) << ExpInfo2(Path().String()));
   if (IsChildFlat(name))
     return;
   SetDirty(true);
