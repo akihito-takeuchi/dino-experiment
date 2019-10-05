@@ -6,6 +6,10 @@
 #include <memory>
 #include <boost/preprocessor.hpp>
 #include <boost/algorithm/string.hpp>
+#ifdef ENABLE_STACKTRACE
+#define BOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED
+#include <boost/stacktrace.hpp>
+#endif
 
 #include "dino/core/dexception.h"
 #include "dino/core/fspath.h"
@@ -90,6 +94,27 @@ std::string GetErrorLocation(const boost::exception& e) {
 
 }  // namespace
 
+int RegisterErrorCode(int error_code, const char* msg, int info_count) {
+  Messages::Instance().Register(error_code, msg, info_count);
+  return error_code;
+}
+
+#ifdef ENABLE_STACKTRACE
+using StackTraceInfo = boost::error_info<struct StackTraceInfoTag,
+                                         boost::stacktrace::stacktrace>;
+#endif
+
+DException::DException(int error_code)
+    : boost::exception(), std::exception(), error_code_(error_code) {
+#ifdef ENABLE_STACKTRACE
+  *this << StackTraceInfo(boost::stacktrace::stacktrace());
+#endif
+}
+
+DException::DException(const DException& e)
+    : boost::exception(e), error_code_(e.error_code_) {
+}
+
 std::string DException::GetErrorMessage() const {
   MsgInfo info = Messages::Instance().GetMessageInfo(error_code_);
   std::string msg;
@@ -114,9 +139,20 @@ std::string DException::GetErrorMessage() const {
   return msg;
 }
 
-int RegisterErrorCode(int error_code, const char* msg, int info_count) {
-  Messages::Instance().Register(error_code, msg, info_count);
-  return error_code;
+const char* DException::what() const noexcept {
+  std::ostringstream ss;
+  ss << GetErrorMessage();
+
+#ifdef ENABLE_STACKTRACE
+  const boost::stacktrace::stacktrace* st =
+       boost::get_error_info<StackTraceInfo>(*this);
+  if (st)
+    ss << '\n' << *st;
+#endif
+
+  error_message_ = ss.str();
+
+  return error_message_.c_str();
 }
 
 }  // namespace core

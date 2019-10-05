@@ -7,36 +7,18 @@
 #include <stdexcept>
 #include <boost/lexical_cast.hpp>
 #include <boost/exception/all.hpp>
-#ifdef ENABLE_STACKTRACE
-#define BOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED
-#include <boost/stacktrace.hpp>
-#endif
 
 namespace dino {
 
 namespace core {
 
-#ifdef ENABLE_STACKTRACE
-using StackTraceInfo = boost::error_info<struct StackTraceInfoTag,
-                                         boost::stacktrace::stacktrace>;
-#endif
-
 class DException : public boost::exception, public std::exception {
  public:
-  DException(int error_code)
-      : boost::exception(), std::exception(), error_code_(error_code) {
-#ifdef ENABLE_STACKTRACE
-    *this << StackTraceInfo(boost::stacktrace::stacktrace());
-#endif
-  }
-  DException(const DException& e)
-      : boost::exception(e), error_code_(e.error_code_) {}
+  DException(int error_code);
+  DException(const DException& e);
   virtual ~DException() = default;
   virtual std::string GetErrorMessage() const;
-  virtual const char* what() const noexcept {
-    error_message_ = GetErrorMessage();
-    return error_message_.c_str();
-  }
+  virtual const char* what() const noexcept;
 
  private:
   mutable std::string error_message_;
