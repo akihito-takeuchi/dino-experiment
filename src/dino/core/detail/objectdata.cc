@@ -947,6 +947,8 @@ void ObjectData::Impl::RemoveBaseFromChildren(const DObjPath& base_path) {
         base_list.end(),
         [&child_base_path](auto& info) { return info.path == child_base_path; });
     if (itr != base_list.end()) {
+      for (auto& connection : itr->connections)
+        connection.disconnect();
       base_list.erase(itr);
       child_data->impl_->UpdateEffectiveBaseList();
       child_data->impl_->RefreshChildrenInBase();
@@ -1412,7 +1414,11 @@ void ObjectData::Impl::ProcessBaseObjectUpdate(
               base_list.cbegin(),
               base_list.cend(),
               [&target_path] (auto& b) { return b.path == target_path; });
+          for (auto& connection : itr->connections)
+            connection.disconnect();
           base_list.erase(itr);
+          child_data->impl_->UpdateEffectiveBaseList();
+          child_data->impl_->RefreshChildrenInBase();
         }
         UpdateEffectiveBaseList();
         RefreshChildrenInBase();
