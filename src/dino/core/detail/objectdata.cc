@@ -545,12 +545,12 @@ void ObjectData::Impl::SetAttr(const std::string& key, const std::string& value)
 }
 
 void ObjectData::Impl::SetAllAttrsToBeSaved() {
-  bool already_actual = IsActual();
+  bool set_flag = false;
   for (auto& kv : temp_attrs_) {
-    if (!already_actual) {
+    if (!set_flag) {
       SetIsActual(true);
       SetDirty(true);
-      already_actual = true;
+      set_flag = true;
     }
     attrs_[kv.first] = kv.second;
   }

@@ -157,4 +157,4 @@ const char* DException::what() const noexcept {
 
 }  // namespace core
 
-}  // namespace dinot
+}  // namespace dino
