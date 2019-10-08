@@ -53,9 +53,12 @@ class DObject {
   std::vector<DObjInfo> Children() const;
   DObjInfo ChildInfo(const std::string& name) const;
   size_t ChildCount() const;
-  DObjectSp GetChildObject(size_t index) const;
-  DObjectSp GetChildObject(const std::string& name) const;
-  DObjectSp OpenChildObject(const std::string& name) const;
+  virtual DObjectSp GetChild(size_t index,
+                             OpenMode mode = OpenMode::kReadOnly) const;
+  DObjectSp GetChild(const std::string& name,
+                     OpenMode mode = OpenMode::kReadOnly) const;
+  DObjectSp OpenChild(const std::string& name,
+                      OpenMode mode = OpenMode::kReadOnly) const;
   DObjectSp CreateChild(const std::string& name,
                         const std::string& type,
                         bool is_flattened = false);
@@ -78,10 +81,10 @@ class DObject {
   void SetDirty(bool dirty = true);
 
   void AddBase(const DObjectSp& base);
-  std::vector<DObjectSp> BaseObjects() const;
+  std::vector<DObjectSp> Bases() const;
   void RemoveBase(const DObjectSp& base);
 
-  std::vector<DObjectSp> BaseObjectsFromParent() const;
+  std::vector<DObjectSp> BasesFromParent() const;
 
   std::vector<DObjectSp> EffectiveBases() const;
 

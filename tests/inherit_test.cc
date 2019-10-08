@@ -78,8 +78,8 @@ TEST_F(InheritTest, SimpleIneritance) {
   child2->Put("test", 100);
   ASSERT_FALSE(child1->HasKey("test"));
   ASSERT_EQ(child2->Get("test"), 100);
-  ASSERT_EQ(child1->BaseObjects().size(), 0u);
-  ASSERT_EQ(child2->BaseObjects().size(), 0u);
+  ASSERT_EQ(child1->Bases().size(), 0u);
+  ASSERT_EQ(child2->Bases().size(), 0u);
 
   child1->AddBase(child2);
   ASSERT_TRUE(child1->HasKey("test"));
@@ -87,10 +87,10 @@ TEST_F(InheritTest, SimpleIneritance) {
   ASSERT_EQ(child2->Get("test"), 100);
   ASSERT_EQ(child1->Where("test"), path2);
   ASSERT_FALSE(child1->IsLocal("test"));
-  ASSERT_EQ(child1->BaseObjects().size(), 1u);
-  ASSERT_EQ(child1->BaseObjects()[0]->Path(), child2->Path());
-  ASSERT_NE(child1->BaseObjects()[0]->Path(), child1->Path());
-  ASSERT_EQ(child2->BaseObjects().size(), 0u);
+  ASSERT_EQ(child1->Bases().size(), 1u);
+  ASSERT_EQ(child1->Bases()[0]->Path(), child2->Path());
+  ASSERT_NE(child1->Bases()[0]->Path(), child1->Path());
+  ASSERT_EQ(child2->Bases().size(), 0u);
 
   child1->Put("test", 200);
   ASSERT_TRUE(child1->HasKey("test"));
@@ -105,8 +105,8 @@ TEST_F(InheritTest, SimpleIneritance) {
   ASSERT_EQ(child2->Get("test"), 100);
   ASSERT_EQ(child1->Where("test"), path1);
   ASSERT_TRUE(child1->IsLocal("test"));
-  ASSERT_EQ(child1->BaseObjects().size(), 0u);
-  ASSERT_EQ(child2->BaseObjects().size(), 0u);
+  ASSERT_EQ(child1->Bases().size(), 0u);
+  ASSERT_EQ(child2->Bases().size(), 0u);
 
   child1->RemoveKey("test");
   ASSERT_THROW(child1->Get("test"), dc::DException);
@@ -322,8 +322,8 @@ TEST_F(InheritTestWithCommandStack, SimpleIneritance) {
   child2->Put("test", 100);
   ASSERT_FALSE(child1->HasKey("test"));
   ASSERT_EQ(child2->Get("test"), 100);
-  ASSERT_EQ(child1->BaseObjects().size(), 0u);
-  ASSERT_EQ(child2->BaseObjects().size(), 0u);
+  ASSERT_EQ(child1->Bases().size(), 0u);
+  ASSERT_EQ(child2->Bases().size(), 0u);
 
   child1->AddBase(child2);
   ASSERT_TRUE(child1->HasKey("test"));
@@ -331,10 +331,10 @@ TEST_F(InheritTestWithCommandStack, SimpleIneritance) {
   ASSERT_EQ(child2->Get("test"), 100);
   ASSERT_EQ(child1->Where("test"), path2);
   ASSERT_FALSE(child1->IsLocal("test"));
-  ASSERT_EQ(child1->BaseObjects().size(), 1u);
-  ASSERT_EQ(child1->BaseObjects()[0]->Path(), child2->Path());
-  ASSERT_NE(child1->BaseObjects()[0]->Path(), child1->Path());
-  ASSERT_EQ(child2->BaseObjects().size(), 0u);
+  ASSERT_EQ(child1->Bases().size(), 1u);
+  ASSERT_EQ(child1->Bases()[0]->Path(), child2->Path());
+  ASSERT_NE(child1->Bases()[0]->Path(), child1->Path());
+  ASSERT_EQ(child2->Bases().size(), 0u);
 
   child1->Put("test", 200);
   ASSERT_TRUE(child1->HasKey("test"));
@@ -349,8 +349,8 @@ TEST_F(InheritTestWithCommandStack, SimpleIneritance) {
   ASSERT_EQ(child2->Get("test"), 100);
   ASSERT_EQ(child1->Where("test"), path1);
   ASSERT_TRUE(child1->IsLocal("test"));
-  ASSERT_EQ(child1->BaseObjects().size(), 0u);
-  ASSERT_EQ(child2->BaseObjects().size(), 0u);
+  ASSERT_EQ(child1->Bases().size(), 0u);
+  ASSERT_EQ(child2->Bases().size(), 0u);
 
   child1->RemoveKey("test");
   ASSERT_THROW(child1->Get("test"), dc::DException);
@@ -493,11 +493,11 @@ TEST_F(InheritTest, DeepInheritance) {
     ASSERT_EQ(top->ChildCount(), 2u);
     ASSERT_EQ(top->Children()[0].Name(), kChildName1);
     ASSERT_EQ(top->Children()[1].Name(), kChildName2);
-    auto c1 = top->OpenChildObject(kChildName1);
+    auto c1 = top->OpenChild(kChildName1);
     ASSERT_EQ(c1->Get("key1"), std::string("child1"));
-    auto c2 = top->OpenChildObject(kChildName2);
+    auto c2 = top->OpenChild(kChildName2);
     ASSERT_EQ(c2->Get("key3"), true);
-    auto c3 = c1->OpenChildObject(kChildName3);
+    auto c3 = c1->OpenChild(kChildName3);
     ASSERT_EQ(c3->Get("key2"), 10.0);
   }
   // create another tree which inherits base
@@ -510,16 +510,16 @@ TEST_F(InheritTest, DeepInheritance) {
     auto children = top->Children();
     ASSERT_EQ(children[0].Name(), kChildName1);
     ASSERT_EQ(children[1].Name(), kChildName2);
-    auto c1 = top->OpenChildObject(kChildName1);
+    auto c1 = top->OpenChild(kChildName1);
     ASSERT_FALSE(c1->IsActual());
     ASSERT_EQ(c1->Name(), std::string(kChildName1));
     ASSERT_EQ(c1->Path(), dc::DObjPath(fmt::format("{}/{}", kTopName2, kChildName1)));
     ASSERT_EQ(c1->Get("key1"), std::string("child1"));
     ASSERT_EQ(c1->ChildCount(), 1u);
-    auto c2 = top->OpenChildObject(kChildName2);
+    auto c2 = top->OpenChild(kChildName2);
     ASSERT_EQ(c2->ChildCount(), 0u);
     ASSERT_EQ(c2->Get("key3"), true);
-    auto c3 = c1->OpenChildObject(kChildName3);
+    auto c3 = c1->OpenChild(kChildName3);
     ASSERT_EQ(c3->ChildCount(), 0u);
     ASSERT_EQ(c3->Get("key2"), 10.0);
     top->Save(true);
@@ -536,7 +536,7 @@ TEST_F(InheritTest, DeepInheritance) {
     ASSERT_EQ(children[1].Name(), kChildName2);
     ASSERT_FALSE(children[0].IsLocal());
     ASSERT_FALSE(children[1].IsLocal());
-    auto c1 = top->OpenChildObject(kChildName1);
+    auto c1 = top->OpenChild(kChildName1);
     ASSERT_FALSE(c1->IsActual());
     ASSERT_EQ(top->ChildInfo(kChildName1), children[0]);
     ASSERT_FALSE(top->ChildInfo(kChildName1).IsLocal());
@@ -544,12 +544,12 @@ TEST_F(InheritTest, DeepInheritance) {
     ASSERT_EQ(c1->Path(), dc::DObjPath(fmt::format("{}/{}", kTopName2, kChildName1)));
     ASSERT_EQ(c1->Get("key1"), std::string("child1"));
     ASSERT_EQ(c1->ChildCount(), 1u);
-    ASSERT_EQ(c1->BaseObjects().size(), 0u);
+    ASSERT_EQ(c1->Bases().size(), 0u);
     ASSERT_EQ(c1->EffectiveBases().size(), 1u);
-    auto c2 = top->OpenChildObject(kChildName2);
+    auto c2 = top->OpenChild(kChildName2);
     ASSERT_EQ(c2->ChildCount(), 0u);
     ASSERT_EQ(c2->Get("key3"), true);
-    auto c3 = c1->OpenChildObject(kChildName3);
+    auto c3 = c1->OpenChild(kChildName3);
     ASSERT_EQ(c3->ChildCount(), 0u);
     ASSERT_EQ(c3->Get("key2"), 10.0);
     c3->SetEditable();
@@ -569,7 +569,7 @@ TEST_F(InheritTest, DeepInheritance) {
   {
     auto session = dc::Session::Open(kWspFile2);
     auto top = session->OpenObject(kTopName2);
-    auto c1 = top->OpenChildObject(kChildName1);
+    auto c1 = top->OpenChild(kChildName1);
     ASSERT_EQ(top->ChildCount(), 2u);
     auto children = top->Children();
     ASSERT_TRUE(children[0].IsLocal());
@@ -579,11 +579,11 @@ TEST_F(InheritTest, DeepInheritance) {
     ASSERT_EQ(c1->Path(), dc::DObjPath(fmt::format("{}/{}", kTopName2, kChildName1)));
     ASSERT_EQ(c1->Get("key1"), std::string("child1"));
     ASSERT_EQ(c1->ChildCount(), 1u);
-    auto c3 = c1->OpenChildObject(kChildName3);
+    auto c3 = c1->OpenChild(kChildName3);
     ASSERT_EQ(c3->ChildCount(), 0u);
     ASSERT_EQ(c3->Get("key1"),std::string("test"));
     ASSERT_EQ(c3->Get("key2"), 5.0);
-    auto c2 = top->OpenChildObject(kChildName2);
+    auto c2 = top->OpenChild(kChildName2);
     ASSERT_FALSE(c2->IsActual());
     ASSERT_FALSE(top->ChildInfo(kChildName2).IsLocal());
     c2->SetEditable();
@@ -602,17 +602,17 @@ TEST_F(InheritTest, DeepInheritance) {
   {
     auto session = dc::Session::Open(kWspFile2);
     auto top = session->OpenObject(kTopName2);
-    auto base = top->BaseObjects()[0];
-    auto c1 = top->OpenChildObject(kChildName1);
-    ASSERT_EQ(top->BaseObjects().size(), 1u);
+    auto base = top->Bases()[0];
+    auto c1 = top->OpenChild(kChildName1);
+    ASSERT_EQ(top->Bases().size(), 1u);
     ASSERT_EQ(top->EffectiveBases().size(), 1u);
-    ASSERT_EQ(c1->BaseObjects().size(), 0u);
+    ASSERT_EQ(c1->Bases().size(), 0u);
     ASSERT_EQ(c1->EffectiveBases().size(), 1u);
     top->SetEditable();
     top->RemoveBase(base);
-    ASSERT_EQ(top->BaseObjects().size(), 0u);
+    ASSERT_EQ(top->Bases().size(), 0u);
     ASSERT_EQ(top->EffectiveBases().size(), 0u);
-    ASSERT_EQ(c1->BaseObjects().size(), 0u);
+    ASSERT_EQ(c1->Bases().size(), 0u);
     ASSERT_EQ(c1->EffectiveBases().size(), 0u);
     top->Save();
   }
@@ -620,14 +620,14 @@ TEST_F(InheritTest, DeepInheritance) {
   {
     auto session = dc::Session::Open(kWspFile2);
     auto top = session->OpenObject(kTopName2);
-    auto c1 = top->OpenChildObject(kChildName1);
+    auto c1 = top->OpenChild(kChildName1);
     ASSERT_EQ(top->ChildCount(), 1u);
     ASSERT_TRUE(c1->IsActual());
     ASSERT_EQ(c1->Name(), std::string(kChildName1));
     ASSERT_EQ(c1->Path(), dc::DObjPath(fmt::format("{}/{}", kTopName2, kChildName1)));
     ASSERT_FALSE(c1->HasKey("key1"));
     ASSERT_EQ(c1->ChildCount(), 1u);
-    auto c3 = c1->OpenChildObject(kChildName3);
+    auto c3 = c1->OpenChild(kChildName3);
     ASSERT_EQ(c3->ChildCount(), 0u);
     ASSERT_EQ(c3->Get("key1"), std::string("test"));
     ASSERT_EQ(c3->Get("key2"), 5.0);
@@ -636,15 +636,14 @@ TEST_F(InheritTest, DeepInheritance) {
   {
     auto session = dc::Session::Open(kWspFile2);
     auto top1 = session->OpenObject(kTopName1);
-    auto top2 = session->OpenObject(kTopName2);
+    auto top2 = session->OpenObject(kTopName2, dc::OpenMode::kEditable);
     ASSERT_EQ(top2->ChildCount(), 1u);
-    top2->SetEditable();
     top2->AddBase(top1);
     ASSERT_EQ(top2->ChildCount(), 2u);
     ASSERT_TRUE(top2->ChildInfo(kChildName1).IsLocal());
     ASSERT_FALSE(top2->ChildInfo(kChildName2).IsLocal());
-    auto c1 = top2->OpenChildObject(kChildName1);
-    auto c3 = c1->OpenChildObject(kChildName3);
+    auto c1 = top2->OpenChild(kChildName1);
+    auto c3 = c1->OpenChild(kChildName3);
     ASSERT_TRUE(c3->IsActual());
     ASSERT_EQ(c3->Get("key2"), 5.0);
   }
@@ -652,7 +651,6 @@ TEST_F(InheritTest, DeepInheritance) {
   {
     auto session = dc::Session::Open(kWspFile2);
     auto top = session->CreateTopLevelObject(kTopName3, kTopName3);
-    top->SetEditable();
     session->InitTopLevelObjectPath(kTopName3, kTopName3);
     auto c1 = top->CreateChild(kChildName1, kChildName1);
     ASSERT_EQ(top->ChildCount(), 1u);
@@ -661,7 +659,7 @@ TEST_F(InheritTest, DeepInheritance) {
     ASSERT_EQ(top->ChildCount(), 2u);
     ASSERT_EQ(c1->ChildCount(), 1u);
     ASSERT_EQ(c1->Get("key1"), std::string("child1"));
-    ASSERT_EQ(c1->BaseObjects().size(), 0u);
+    ASSERT_EQ(c1->Bases().size(), 0u);
     ASSERT_EQ(c1->EffectiveBases().size(), 1u);
     top->Save(true);
     session->Save();
@@ -676,7 +674,7 @@ TEST_F(InheritTest, DeepInheritance) {
   {
     auto session = dc::Session::Open(kWspFile2);
     auto top = session->OpenObject(kTopName3);
-    auto c1 = top->OpenChildObject(kChildName1);
+    auto c1 = top->OpenChild(kChildName1);
     ASSERT_EQ(top->ChildCount(), 2u);
     ASSERT_EQ(c1->ChildCount(), 1u);
     ASSERT_EQ(c1->Get("key1"), std::string("child1"));
@@ -685,11 +683,9 @@ TEST_F(InheritTest, DeepInheritance) {
     auto c4 = c1->CreateChild(kChildName4, "test");
     ASSERT_TRUE(c4->IsActual());
     ASSERT_EQ(c4->EffectiveBases().size(), 0u);
-    auto base_top = top->BaseObjects()[0];
-    auto base_c1 = base_top->GetChildObject(kChildName1);
-    base_c1->SetEditable();
+    auto base_top = top->Bases()[0];
+    auto base_c1 = base_top->GetChild(kChildName1, dc::OpenMode::kEditable);
     auto base_c4 = base_c1->CreateChild(kChildName4, "test");
-    base_c4->SetEditable();
     base_c4->Put("key4", "child4");
     ASSERT_EQ(c1->ChildCount(), 2u);
     ASSERT_EQ(base_c4->Get("key4"), std::string("child4"));
@@ -701,7 +697,7 @@ TEST_F(InheritTest, DeepInheritance) {
 
     auto base_c5 = base_c1->CreateChild(kChildName5, "test");
     ASSERT_EQ(c1->ChildCount(), 3u);
-    auto c5 = c1->OpenChildObject(kChildName5);
+    auto c5 = c1->OpenChild(kChildName5);
     ASSERT_FALSE(c5->IsActual());
     base_c1->DeleteChild(kChildName5);
     ASSERT_EQ(c1->ChildCount(), 2u);
@@ -748,9 +744,9 @@ TEST_F(InheritTest, DeepInheritance2) {
     auto base_top = session->OpenObject(kTopName1);
     top->AddBase(base_top);
     ASSERT_EQ(top->ChildCount(), 2u);
-    auto c1 = top->OpenChildObject(kChildName1);
+    auto c1 = top->OpenChild(kChildName1);
     ASSERT_EQ(c1->ChildCount(), 1u);
-    auto c3 = c1->OpenChildObject(kChildName3);
+    auto c3 = c1->OpenChild(kChildName3);
     ASSERT_EQ(c3->ChildCount(), 2u);
     top->RemoveBase(base_top);
     ASSERT_EQ(top->ChildCount(), 0u);

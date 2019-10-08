@@ -190,8 +190,8 @@ DObjectSp CommandStack::UpdateChildList(CommandType type,
 
   DObjectSp child;
   if (type == CommandType::kAdd) {
-    child = session_->GetObject(path.ChildPath(child_name));
-    child->SetEditable();
+    child = session_->GetObject(
+        path.ChildPath(child_name), OpenMode::kEditable);
   }
   in_command_ = false;
   return child;
@@ -211,10 +211,12 @@ void CommandStack::ExecRedo(CommandData& cmd_data) {
       obj->ExecRemoveValue(cmd.Key(), cmd.PrevValue());
       break;
     case CommandType::kAddBaseObject:
-      obj->ExecAddBase(session_->GetObject(cmd.TargetObjectPath()));
+      obj->ExecAddBase(
+          session_->GetObject(cmd.TargetObjectPath(), OpenMode::kReadOnly));
       break;
     case CommandType::kRemoveBaseObject:
-      obj->ExecRemoveBase(session_->GetObject(cmd.TargetObjectPath()));
+      obj->ExecRemoveBase(
+          session_->GetObject(cmd.TargetObjectPath(), OpenMode::kReadOnly));
       break;
     case CommandType::kAddChild:
       obj->ExecCreateChild(cmd.TargetObjectName(),
@@ -255,10 +257,12 @@ void CommandStack::ExecUndo(CommandData& cmd_data) {
       obj->ExecAddValue(cmd.Key(), cmd.PrevValue());
       break;
     case CommandType::kAddBaseObject:
-      obj->ExecRemoveBase(session_->GetObject(cmd.TargetObjectPath()));
+      obj->ExecRemoveBase(
+          session_->GetObject(cmd.TargetObjectPath(), OpenMode::kReadOnly));
       break;
     case CommandType::kRemoveBaseObject:
-      obj->ExecAddBase(session_->GetObject(cmd.TargetObjectPath()));
+      obj->ExecAddBase(
+          session_->GetObject(cmd.TargetObjectPath(), OpenMode::kReadOnly));
       break;
     case CommandType::kAddChild:
     case CommandType::kAddFlattenedChild:
@@ -278,11 +282,11 @@ void CommandStack::ExecUndo(CommandData& cmd_data) {
 void CommandStack::StoreChildData(detail::ObjectData* obj,
                                   const std::string& target_obj_name,
                                   const RemovedDataSp& data) {
-  auto target = obj->GetChildObject(target_obj_name);
+  auto target = obj->GetChild(target_obj_name, OpenMode::kReadOnly);
   data->name = target_obj_name;
   data->type = target->Type();
   data->is_flattened = target->IsFlattened();
-  for (auto& base : target->BaseObjects())
+  for (auto& base : target->Bases())
     data->base_objects.push_back(base->Path());
   for (auto& key : target->Keys(true))
     data->values[key] = target->Get(key);
@@ -301,7 +305,8 @@ void CommandStack::RestoreChildData(detail::ObjectData* obj,
                                     const RemovedDataSp& data) {
   DObjectSp child_obj;
   if (obj->HasLocalChild(data->name))
-    child_obj = session_->GetObject(obj->Path().ChildPath(data->name));
+    child_obj = session_->GetObject(
+        obj->Path().ChildPath(data->name), OpenMode::kReadOnly);
   else
     child_obj = obj->ExecCreateChild(
         data->name, data->type, data->is_flattened);
@@ -309,7 +314,8 @@ void CommandStack::RestoreChildData(detail::ObjectData* obj,
   for (auto& kv : data->values)
     child_obj_data->Put(kv.first, kv.second);
   for (auto& base_path : data->base_objects)
-    child_obj_data->ExecAddBase(session_->GetObject(base_path));
+    child_obj_data->ExecAddBase(
+        session_->GetObject(base_path, OpenMode::kReadOnly));
   for (auto& child_data : data->children)
     RestoreChildData(child_obj_data, child_data);
 }

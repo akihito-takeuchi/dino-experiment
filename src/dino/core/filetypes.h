@@ -9,6 +9,11 @@ namespace dino {
 
 namespace core {
 
+enum class OpenMode {
+  kEditable,
+  kReadOnly
+};
+
 enum class FileFormat {
   kJson,
   kUnknown,

@@ -171,21 +171,27 @@ size_t DObject::ChildCount() const {
   return impl_->GetRawData()->ChildCount();
 }
 
-DObjectSp DObject::GetChildObject(size_t index) const {
-  return impl_->GetRawData()->GetChildObject(index);
+DObjectSp DObject::GetChild(size_t index, OpenMode mode) const {
+  auto raw_data = impl_->GetRawData();
+  if (index > raw_data->ChildCount())
+    BOOST_THROW_EXCEPTION(
+        DObjectException(kErrChildIndexOutOfRange)
+        << ExpInfo1(index) << ExpInfo2(Path().String()));
+  return raw_data->GetChild(raw_data->Children()[index].Name(), mode);
 }
 
-DObjectSp DObject::GetChildObject(const std::string& name) const {
-  return impl_->GetRawData()->GetChildObject(name);
+DObjectSp DObject::GetChild(const std::string& name, OpenMode mode) const {
+  return impl_->GetRawData()->GetChild(name, mode);
 }
 
-DObjectSp DObject::OpenChildObject(const std::string& name) const {
-  return impl_->GetRawData()->OpenChildObject(name);
+DObjectSp DObject::OpenChild(const std::string& name, OpenMode mode) const {
+  return impl_->GetRawData()->OpenChild(name, mode);
 }
 
 DObjectSp DObject::CreateChild(const std::string& name,
                                const std::string& type,
                                bool is_flattened) {
+  REQUIRE_EDITABLE();
   return impl_->GetRawData()->CreateChild(name, type, is_flattened);
 }
 
@@ -253,6 +259,7 @@ bool DObject::IsDirty() const {
 }
 
 void DObject::SetDirty(bool dirty) {
+  REQUIRE_EDITABLE();
   impl_->GetRawData()->SetDirty(dirty);
 }
 
@@ -261,16 +268,17 @@ void DObject::AddBase(const DObjectSp& base) {
   impl_->GetRawData()->AddBase(base);
 }
 
-std::vector<DObjectSp> DObject::BaseObjects() const {
-  return impl_->GetRawData()->BaseObjects();
+std::vector<DObjectSp> DObject::Bases() const {
+  return impl_->GetRawData()->Bases();
 }
 
 void DObject::RemoveBase(const DObjectSp& base) {
+  REQUIRE_EDITABLE();
   return impl_->GetRawData()->RemoveBase(base);
 }
 
-std::vector<DObjectSp> DObject::BaseObjectsFromParent() const {
-  return impl_->GetRawData()->BaseObjectsFromParent();
+std::vector<DObjectSp> DObject::BasesFromParent() const {
+  return impl_->GetRawData()->BasesFromParent();
 }
 
 std::vector<DObjectSp> DObject::EffectiveBases() const {
@@ -299,10 +307,7 @@ CommandStackSp DObject::GetCommandStack() const {
 }
 
 void DObject::Save(bool recurse) {
-  if (!impl_->IsEditable())
-    BOOST_THROW_EXCEPTION(
-        DObjectException(kErrObjectIsNotEditable)
-        << ExpInfo1(Name()));
+  REQUIRE_EDITABLE();
   impl_->GetRawData()->Save(recurse);
 }
 

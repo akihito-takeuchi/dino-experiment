@@ -108,18 +108,19 @@ class Session::Impl {
   DObjectSp CreateObjectImpl(const DObjPath& obj_path,
                              const std::string& type,
                              bool is_flattened);
-  DObjectSp GetObject(const DObjPath& obj_path) const;
-  DObjectSp GetObject(uintptr_t object_id) const;
+  DObjectSp GetObject(const DObjPath& obj_path, OpenMode mode) const;
+  DObjectSp GetObject(uintptr_t object_id, OpenMode mode) const;
   void PreNewObjectCheck(const DObjPath& obj_path) const;
   void PreOpenObjectCheck(const DObjPath& obj_path,
                           const FsPath& dir_path = FsPath(),
                           bool need_top_dir_path = true) const;
-  DObjectSp MakeObject(const DObjPath& obj_path) const;
+  DObjectSp MakeObject(const DObjPath& obj_path, OpenMode mode) const;
   DObjectSp MakeDefaultObject(const DObjPath& obj_path) const;
   DObjectSp OpenTopLevelObject(const FsPath& dir_path,
-                               const std::string& name);
+                               const std::string& name,
+                               OpenMode mode);
   void OpenDataAtPath(const DObjPath& path, const FsPath& top_dir);
-  DObjectSp OpenObject(const DObjPath& obj_path);
+  DObjectSp OpenObject(const DObjPath& obj_path, OpenMode mode);
   void DeleteObjectImpl(const DObjPath& obj_path, bool delete_files = true);
   void PurgeObject(const DObjPath& obj_path, bool check_existence = true);
   void RegisterObjectData(const detail::DataSp& data);
@@ -394,8 +395,7 @@ DObjectSp Session::Impl::CreateTopLevelObject(
     RegisterObjectData(
         detail::ObjectData::Create(obj_path, type, nullptr,
                                    self_, is_flattened));
-    DObjectSp obj(MakeObject(obj_path));
-    obj->SetEditable();
+    DObjectSp obj(MakeObject(obj_path, OpenMode::kEditable));
     AddTopLevelObjectPath(name, FsPath(), true);
     return obj;
   } catch (const DException& e) {
@@ -439,17 +439,16 @@ DObjectSp Session::Impl::CreateObjectImpl(const DObjPath& obj_path,
 
   RegisterObjectData(
       detail::ObjectData::Create(obj_path, type, parent, self_, is_flattened));
-  auto obj = MakeObject(obj_path);
-  obj->SetEditable();
+  auto obj = MakeObject(obj_path, OpenMode::kEditable);
   return obj;
 }
 
-DObjectSp Session::Impl::GetObject(const DObjPath& obj_path) const {
-  auto obj = MakeObject(obj_path);
-  return obj;
+DObjectSp Session::Impl::GetObject(const DObjPath& obj_path,
+                                   OpenMode mode) const {
+  return MakeObject(obj_path, mode);
 }
 
-DObjectSp Session::Impl::GetObject(uintptr_t object_id) const {
+DObjectSp Session::Impl::GetObject(uintptr_t object_id, OpenMode mode) const {
   detail::DataSp data;
   for (auto& path_data_pair : obj_data_map_) {
     if (reinterpret_cast<uintptr_t>(path_data_pair.second.get()) == object_id) {
@@ -461,14 +460,18 @@ DObjectSp Session::Impl::GetObject(uintptr_t object_id) const {
     BOOST_THROW_EXCEPTION(
         SessionException(kErrObjectDataNotOpened)
         << ExpInfo1(fmt::format("OBJ_ID:{}", object_id)));
-  return std::shared_ptr<DObject>(ObjectFactory::Instance().Create(data));
+  auto obj = std::shared_ptr<DObject>(ObjectFactory::Instance().Create(data));
+  if (mode == OpenMode::kEditable)
+    obj->SetEditable();
+  return obj;
 }
 
 DObjectSp Session::Impl::OpenTopLevelObject(const FsPath& dir_path,
-                                            const std::string& name) {
+                                            const std::string& name,
+                                            OpenMode mode) {
   DObjPath obj_path(name);
   if (HasObjectData(obj_path))
-    return GetObject(obj_path);
+    return GetObject(obj_path, mode);
 
   PreOpenObjectCheck(obj_path, dir_path);
 
@@ -478,7 +481,7 @@ DObjectSp Session::Impl::OpenTopLevelObject(const FsPath& dir_path,
     RegisterObjectData(data);
     data->Load();
     AddTopLevelObjectPath(name, dir_path, true, abs_path);
-    return MakeObject(obj_path);
+    return MakeObject(obj_path, mode);
   } catch (const DException& e) {
     throw SessionException(e);
   }
@@ -507,16 +510,16 @@ void Session::Impl::OpenDataAtPath(
     auto data = obj_data_map_[path];
     for (auto& base_of_parent : parent_data->EffectiveBases()) {
       if (base_of_parent->HasChild(name)) {
-        auto base = base_of_parent->OpenChildObject(name);
+        auto base = base_of_parent->OpenChild(name, OpenMode::kReadOnly);
         data->AddBaseFromParent(base);
       }
     }
   }
 }
 
-DObjectSp Session::Impl::OpenObject(const DObjPath& obj_path) {
+DObjectSp Session::Impl::OpenObject(const DObjPath& obj_path, OpenMode mode) {
   if (HasObjectData(obj_path))
-    return GetObject(obj_path);
+    return GetObject(obj_path, mode);
 
   if (obj_path.IsTop()) {
     FsPath dir_path = FsPath(obj_path.TopName());
@@ -528,7 +531,7 @@ DObjectSp Session::Impl::OpenObject(const DObjPath& obj_path) {
           SessionException(kErrTopObjectDoesNotExist)
           << ExpInfo1(obj_path.TopName()));
     return OpenTopLevelObject(FsPath(obj_path.TopName()),
-                              obj_path.TopName());
+                              obj_path.TopName(), mode);
   }
 
   PreOpenObjectCheck(obj_path, FsPath(), false);
@@ -545,7 +548,7 @@ DObjectSp Session::Impl::OpenObject(const DObjPath& obj_path) {
     }
     current_path = current_path.ChildPath(remaining_path.TopName());
     OpenDataAtPath(current_path, top_dir);
-    return MakeObject(current_path);
+    return MakeObject(current_path, mode);
   } catch (const DException& e) {
     throw SessionException(e);
   }
@@ -557,8 +560,7 @@ void Session::Impl::DeleteObjectImpl(const DObjPath& obj_path,
   auto target_name = obj_path.LeafName();
   if (!obj_path.IsTop()) {
     auto parent_path = obj_path.ParentPath();
-    auto parent = GetObject(parent_path);
-    parent->SetEditable();
+    auto parent = GetObject(parent_path, OpenMode::kEditable);
     if (!parent->IsChildFlat(target_name) && !parent->DirPath().empty())
       dir_to_remove = parent->DirPath() / target_name;
   } else {
@@ -575,13 +577,17 @@ void Session::Impl::DeleteObjectImpl(const DObjPath& obj_path,
   PurgeObject(obj_path, false);
 }
 
-DObjectSp Session::Impl::MakeObject(const DObjPath& obj_path) const {
+DObjectSp Session::Impl::MakeObject(const DObjPath& obj_path,
+                                    OpenMode mode) const {
   if (!HasObjectData(obj_path))
     BOOST_THROW_EXCEPTION(
         SessionException(kErrObjectDataNotOpened)
         << ExpInfo1(obj_path.String()));
   auto data = obj_data_map_.find(obj_path)->second;
-  return std::shared_ptr<DObject>(ObjectFactory::Instance().Create(data));
+  auto obj = std::shared_ptr<DObject>(ObjectFactory::Instance().Create(data));
+  if (mode == OpenMode::kEditable)
+    obj->SetEditable();
+  return obj;
 }
 
 DObjectSp Session::Impl::MakeDefaultObject(const DObjPath& obj_path) const {
@@ -654,8 +660,9 @@ DObjectSp Session::CreateTopLevelObject(const std::string& name,
 }
 
 DObjectSp Session::OpenTopLevelObject(const FsPath& dir_path,
-                                      const std::string& type) {
-  return impl_->OpenTopLevelObject(dir_path, type);
+                                      const std::string& type,
+                                      OpenMode mode) {
+  return impl_->OpenTopLevelObject(dir_path, type, mode);
 }
 
 void Session::InitTopLevelObjectPath(const std::string& name,
@@ -669,7 +676,7 @@ DObjectSp Session::CreateObject(const DObjPath& obj_path,
   if (obj_path.IsTop())
     return CreateObjectImpl(obj_path, type, is_flattened);
 
-  auto parent = GetObject(obj_path.ParentPath());
+  auto parent = GetObject(obj_path.ParentPath(), OpenMode::kEditable);
   return parent->CreateChild(obj_path.LeafName(), type, is_flattened);
 }
 
@@ -679,16 +686,16 @@ DObjectSp Session::CreateObjectImpl(const DObjPath& obj_path,
   return impl_->CreateObjectImpl(obj_path, type, is_flattened);
 }
 
-DObjectSp Session::OpenObject(const DObjPath& obj_path) {
-  return impl_->OpenObject(obj_path);
+DObjectSp Session::OpenObject(const DObjPath& obj_path, OpenMode mode) {
+  return impl_->OpenObject(obj_path, mode);
 }
 
-DObjectSp Session::GetObject(const DObjPath& obj_path) const {
-  return impl_->GetObject(obj_path);
+DObjectSp Session::GetObject(const DObjPath& obj_path, OpenMode mode) const {
+  return impl_->GetObject(obj_path, mode);
 }
 
-DObjectSp Session::GetObject(uintptr_t object_id) const {
-  return impl_->GetObject(object_id);
+DObjectSp Session::GetObject(uintptr_t object_id, OpenMode mode) const {
+  return impl_->GetObject(object_id, mode);
 }
 
 bool Session::IsOpened(const DObjPath& obj_path) const {
@@ -701,8 +708,7 @@ void Session::DeleteObject(const DObjPath& obj_path) {
     return;
   }
 
-  auto parent = GetObject(obj_path.ParentPath());
-  parent->SetEditable();
+  auto parent = GetObject(obj_path.ParentPath(), OpenMode::kEditable);
   parent->DeleteChild(obj_path.LeafName());
 }
 

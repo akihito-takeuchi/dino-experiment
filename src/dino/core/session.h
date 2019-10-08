@@ -30,15 +30,19 @@ class Session : public std::enable_shared_from_this<Session> {
   DObjectSp CreateTopLevelObject(const std::string& name,
                                  const std::string& type);
   DObjectSp OpenTopLevelObject(const FsPath& dir_path,
-                              const std::string& name);
+                               const std::string& name,
+                               OpenMode mode = OpenMode::kReadOnly);
   void InitTopLevelObjectPath(const std::string& name,
                               const FsPath& dir_path);
   DObjectSp CreateObject(const DObjPath& obj_info,
                          const std::string& type,
                          bool is_flattened = false);
-  DObjectSp OpenObject(const DObjPath& obj_path);
-  DObjectSp GetObject(const DObjPath& obj_path) const;
-  DObjectSp GetObject(uintptr_t object_id) const;
+  DObjectSp OpenObject(const DObjPath& obj_path,
+                       OpenMode mode = OpenMode::kReadOnly);
+  DObjectSp GetObject(const DObjPath& obj_path,
+                      OpenMode mode = OpenMode::kReadOnly) const;
+  DObjectSp GetObject(uintptr_t object_id,
+                      OpenMode mode = OpenMode::kReadOnly) const;
   bool IsOpened(const DObjPath& obj_path) const;
   void DeleteObject(const DObjPath& obj_path);
   void RemoveTopLevelObject(const std::string& name, bool delete_files = false);

@@ -15,7 +15,7 @@ namespace {
 
 core::DObjectSp GetObjectAt(const core::DObjectSp& obj, int row) {
   auto child_info = obj->Children()[row];
-  return obj->GetChildObject(child_info.Name());
+  return obj->GetChild(child_info.Name());
 }
 
 int GetRow(const core::DObjectSp& obj, const core::DObjectSp& child) {

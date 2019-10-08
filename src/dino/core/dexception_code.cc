@@ -60,6 +60,8 @@ extern const int kErrObjectExpired = RegisterErrorCode(
     200, "The object handle '{}' already expired", 1);
 extern const int kErrObjectIsNotEditable = RegisterErrorCode(
     201, "The object handle '{}' is not editable", 1);
+extern const int kErrChildIndexOutOfRange = RegisterErrorCode(
+    202, "The child index '{}' out of range at '{}'", 2);
 
 extern const int kErrNoRedoEntry = RegisterErrorCode(
     250, "The command stack of '{}' doesn't have redo entry", 1);

@@ -176,7 +176,7 @@ TEST_F(ObjectTest, Flat) {
     ASSERT_FALSE(child1->IsDirty());
     ASSERT_TRUE(fs::exists(kTopName3));
     ASSERT_TRUE(fs::exists(path1_str));
- 
+
     auto child2 = child1->CreateChild(kChildName2, child2_type);
     ASSERT_FALSE(top->IsDirty());
     ASSERT_FALSE(child1->IsDirty());

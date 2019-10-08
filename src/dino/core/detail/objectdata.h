@@ -61,9 +61,8 @@ class ObjectData {
   bool IsChildFlat(const std::string& name) const;
   void SetChildFlat(const std::string& name);
   void UnsetChildFlat(const std::string& name);
-  DObjectSp GetChildObject(size_t index) const;
-  DObjectSp GetChildObject(const std::string& name) const;
-  DObjectSp OpenChildObject(const std::string& name) const;
+  DObjectSp GetChild(const std::string& name, OpenMode mode) const;
+  DObjectSp OpenChild(const std::string& name, OpenMode mode) const;
   DObjectSp CreateChild(const std::string& name,
                         const std::string& type,
                         bool is_flattened);
@@ -83,11 +82,11 @@ class ObjectData {
   bool IsEditable() const;
 
   void AddBase(const DObjectSp& base);
-  std::vector<DObjectSp> BaseObjects() const;
+  std::vector<DObjectSp> Bases() const;
   void RemoveBase(const DObjectSp& base);
 
   void AddBaseFromParent(const DObjectSp& base);
-  std::vector<DObjectSp> BaseObjectsFromParent() const;
+  std::vector<DObjectSp> BasesFromParent() const;
 
   std::vector<DObjectSp> EffectiveBases() const;
 

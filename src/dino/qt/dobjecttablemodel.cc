@@ -152,7 +152,7 @@ core::DObjectSp DObjectTableModel::IndexToObject(const QModelIndex& index) const
   auto children = impl_->root_obj->Children();
   if (index.row() >= static_cast<int>(children.size()))
     return nullptr;
-  return impl_->root_obj->GetChildObject(children[index.row()].Name());
+  return impl_->root_obj->GetChild(children[index.row()].Name());
 }
 
 int DObjectTableModel::rowCount(const QModelIndex&) const {
@@ -173,20 +173,20 @@ QVariant DObjectTableModel::headerData(
 }
 
 QVariant DObjectTableModel::data(const QModelIndex& index, int role) const {
-  auto obj = impl_->root_obj->GetChildObject(index.row());
+  auto obj = impl_->root_obj->GetChild(index.row());
   auto col_info = impl_->col_info_list[index.column()];
   return col_info.GetData(obj, role);
 }
 
 Qt::ItemFlags DObjectTableModel::flags(const QModelIndex& index) const {
-  auto obj = impl_->root_obj->GetChildObject(index.row());
+  auto obj = impl_->root_obj->GetChild(index.row());
   auto col_info = impl_->col_info_list[index.column()];
   return col_info.GetFlags(obj);
 }
 
 bool DObjectTableModel::setData(
     const QModelIndex& index, const QVariant& value, int role) {
-  auto obj = impl_->root_obj->GetChildObject(index.row());
+  auto obj = impl_->root_obj->GetChild(index.row());
   auto col_info = impl_->col_info_list[index.column()];
   return col_info.SetData(obj, value, role);
 }

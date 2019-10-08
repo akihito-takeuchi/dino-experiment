@@ -194,14 +194,13 @@ class ObjectData::Impl {
   bool IsChildFlat(const std::string& name) const;
   void SetChildFlat(const std::string& name, bool flag_only = false);
   void UnsetChildFlat(const std::string& name);
-  DObjectSp GetChildObject(size_t index) const;
-  DObjectSp GetChildObject(const std::string& name) const;
-  DObjectSp OpenChildObject(const std::string& name) const;
+  DObjectSp GetChild(const std::string& name, OpenMode mode) const;
+  DObjectSp OpenChild(const std::string& name, OpenMode mode) const;
   DObjectSp CreateChild(const std::string& name,
                         const std::string& type,
                         bool is_flattened);
   DObjectSp Parent() const;
-  DObjectSp GetObject(const DObjPath& obj_path);
+  DObjectSp GetObjectByPath(const DObjPath& obj_path, OpenMode mode);
   void AddChildInfo(const DObjInfo& child_info);
   void DeleteChild(const std::string& name);
 
@@ -215,13 +214,13 @@ class ObjectData::Impl {
   bool IsEditable() const;
 
   void AddBase(const DObjectSp& base);
-  std::vector<DObjectSp> BaseObjects() const;
+  std::vector<DObjectSp> Bases() const;
   void RemoveBase(const DObjectSp& base);
 
   void AddBaseFromParent(const DObjectSp& base);
   void AddBaseToChildren(const DObjectSp& base);
   void RemoveBaseFromChildren(const DObjPath& base_path);
-  std::vector<DObjectSp> BaseObjectsFromParent() const;
+  std::vector<DObjectSp> BasesFromParent() const;
   void RemoveBaseFromParent(const DObjectSp& base);
   bool HasObjectInBasesFromParent(const DObjPath& path) const;
 
@@ -644,28 +643,19 @@ void ObjectData::Impl::UnsetChildFlat(const std::string& name) {
   child_flat_flags_[name] = false;
 }
 
-DObjectSp ObjectData::Impl::GetChildObject(size_t index) const {
-  if (index > children_.size())
-    BOOST_THROW_EXCEPTION(
-        ObjectDataException(kErrChildIndexOutOfRange)
-        << ExpInfo1(index) << ExpInfo2(Path().String()));
-  return owner_->GetObject(children_[index].Path());
+DObjectSp ObjectData::Impl::GetChild(const std::string& name, OpenMode mode) const {
+  return owner_->GetObject(obj_path_.ChildPath(name), mode);
 }
 
-DObjectSp ObjectData::Impl::GetChildObject(const std::string& name) const {
-  return owner_->GetObject(obj_path_.ChildPath(name));
-}
-
-DObjectSp ObjectData::Impl::OpenChildObject(const std::string& name) const {
-  return owner_->OpenObject(obj_path_.ChildPath(name));
+DObjectSp ObjectData::Impl::OpenChild(const std::string& name, OpenMode mode) const {
+  return owner_->OpenObject(obj_path_.ChildPath(name), mode);
 }
 
 DObjectSp ObjectData::Impl::CreateChild(
     const std::string& name, const std::string& type, bool is_flattened) {
   if (HasLocalChild(name)) {
     auto child_path = obj_path_.ChildPath(name);
-    auto child = owner_->OpenObject(child_path);
-    child->SetEditable();
+    auto child = owner_->OpenObject(child_path, OpenMode::kEditable);
     return child;
   }
   return Executer()->UpdateChildList(
@@ -675,11 +665,12 @@ DObjectSp ObjectData::Impl::CreateChild(
 DObjectSp ObjectData::Impl::Parent() const {
   if (!parent_)
     return nullptr;
-  return owner_->GetObject(obj_path_.ParentPath());
+  return owner_->GetObject(obj_path_.ParentPath(), OpenMode::kReadOnly);
 }
 
-DObjectSp ObjectData::Impl::GetObject(const DObjPath& obj_path) {
-  return owner_->GetObject(obj_path);
+DObjectSp ObjectData::Impl::GetObjectByPath(const DObjPath& obj_path,
+                                            OpenMode mode) {
+  return owner_->GetObject(obj_path, mode);
 }
 
 void ObjectData::Impl::AddChildInfo(const DObjInfo& child_info) {
@@ -819,7 +810,7 @@ void ObjectData::Impl::SetDirty(bool dirty) {
     // reset dirty flag recursively for flattened children
     for (auto& child_info : local_children_)
       if (IsChildFlat(child_info.Name()))
-        GetChildObject(child_info.Name())->SetDirty(false);
+        GetChild(child_info.Name(), OpenMode::kEditable)->SetDirty(false);
 }
 
 bool ObjectData::Impl::IsDirty() const {
@@ -827,7 +818,7 @@ bool ObjectData::Impl::IsDirty() const {
     // If not dirty, check dirty flag recursively from flattened children
     for (auto& child_info : local_children_)
       if (IsChildFlat(child_info.Name()))
-        if (GetChildObject(child_info.Name())->IsDirty())
+        if (GetChild(child_info.Name(), OpenMode::kReadOnly)->IsDirty())
           return true;
   return dirty_;
 }
@@ -859,7 +850,7 @@ void ObjectData::Impl::AddBase(const DObjectSp& base) {
   Executer()->UpdateBaseObjectList(CommandType::kAdd, self_, base);
 }
 
-std::vector<DObjectSp> ObjectData::Impl::BaseObjects() const {
+std::vector<DObjectSp> ObjectData::Impl::Bases() const {
   std::vector<DObjectSp> objects;
   InstanciateBases();
   std::transform(
@@ -915,9 +906,9 @@ void ObjectData::Impl::AddBaseFromParent(const DObjectSp& base) {
   EmitSignal(cmd, ListenerCallPoint::kPost);
   for (auto& child_info : local_children_) {
     if (base->HasChild(child_info.Name())) {
-      auto child_of_base = base->OpenChildObject(child_info.Name());
-      OpenChildObject(
-          child_info.Name())->GetData()->AddBaseFromParent(child_of_base);
+      auto child_of_base = base->OpenChild(child_info.Name(), OpenMode::kReadOnly);
+      OpenChild(child_info.Name(), OpenMode::kReadOnly)
+          ->GetData()->AddBaseFromParent(child_of_base);
     }
   }
 }
@@ -928,8 +919,8 @@ void ObjectData::Impl::AddBaseToChildren(const DObjectSp& base) {
       continue;
     if (!base->HasChild(child_info.Name()))
       continue;
-    auto child = GetChildObject(child_info.Name());
-    auto base_child = base->OpenChildObject(child_info.Name());
+    auto child = GetChild(child_info.Name(), OpenMode::kReadOnly);
+    auto base_child = base->OpenChild(child_info.Name(), OpenMode::kReadOnly);
     child->GetData()->AddBaseFromParent(base_child);
   }
 }
@@ -938,7 +929,8 @@ void ObjectData::Impl::RemoveBaseFromChildren(const DObjPath& base_path) {
   for (auto& child_info : Children()) {
     if (!owner_->IsOpened(child_info.Path()))
       continue;
-    auto child_data = GetChildObject(child_info.Name())->GetData();
+    auto child_data = GetChild(
+        child_info.Name(), OpenMode::kReadOnly)->GetData();
     auto child_base_path = base_path.ChildPath(child_info.Name());
     child_data->impl_->RemoveBaseFromChildren(child_base_path);
     auto& base_list = child_data->impl_->base_info_from_parent_list_;
@@ -956,7 +948,7 @@ void ObjectData::Impl::RemoveBaseFromChildren(const DObjPath& base_path) {
   }
 }
 
-std::vector<DObjectSp> ObjectData::Impl::BaseObjectsFromParent() const {
+std::vector<DObjectSp> ObjectData::Impl::BasesFromParent() const {
   std::vector<DObjectSp> objects;
   InstanciateBases();
   std::transform(
@@ -1014,7 +1006,7 @@ void ObjectData::Impl::InstanciateBases(
     std::vector<BaseObjInfo>& base_info_list) const {
   for (auto& base_info : base_info_list) {
     if (!base_info.obj || base_info.obj->IsExpired()) {
-      auto base = owner_->OpenObject(base_info.path);
+      auto base = owner_->OpenObject(base_info.path, OpenMode::kReadOnly);
       base_info.obj = base;
       base_info.connections.push_back(
           base->AddListener(
@@ -1032,10 +1024,12 @@ void ObjectData::Impl::InstanciateBases(
         if (!base->HasChild(child_info.Name()))
           continue;
         auto base_child_path = base->Path().ChildPath(child_info.Name());
-        auto child_data = OpenChildObject(child_info.Name())->GetData();
+        auto child_data = OpenChild(
+            child_info.Name(), OpenMode::kReadOnly)->GetData();
         if (child_data->impl_->HasObjectInBasesFromParent(base_child_path))
           continue;
-        auto child_of_base = base->OpenChildObject(child_info.Name());
+        auto child_of_base = base->OpenChild(
+            child_info.Name(), OpenMode::kReadOnly);
         child_data->AddBaseFromParent(child_of_base);
       }
     }
@@ -1076,7 +1070,8 @@ void ObjectData::Impl::Save(bool recurse) {
     while (!remaining_path.Empty()) {
       if (cur_obj->DirPath().empty())
         break;
-      cur_obj = cur_obj->GetChildObject(remaining_path.TopName())->GetData();
+      cur_obj = cur_obj->GetChild(
+          remaining_path.TopName(), OpenMode::kReadOnly)->GetData();
       cur_dir = cur_dir / remaining_path.TopName();
       remaining_path = remaining_path.Tail();
       if (cur_obj->IsFlattened())
@@ -1094,7 +1089,8 @@ void ObjectData::Impl::Save(bool recurse) {
   if (recurse) {
     for (auto& child_info : local_children_) {
       if (IsChildOpened(child_info.Name()) && !IsChildFlat(child_info.Name())) {
-        auto child = GetChildObject(child_info.Name())->GetData();
+        auto child = GetChild(
+            child_info.Name(), OpenMode::kReadOnly)->GetData();
         if (child->IsActual())
           child->Save(recurse);
       }
@@ -1401,13 +1397,13 @@ void ObjectData::Impl::ProcessBaseObjectUpdate(
       if (edit_type == static_cast<unsigned int>(CommandType::kAdd)) {
         RefreshChildrenInBase();
         if (IsChildOpened(target_name)) {
-          auto base_child = owner_->OpenObject(target_path);
-          auto child = GetChildObject(target_name);
+          auto base_child = owner_->OpenObject(target_path, OpenMode::kReadOnly);
+          auto child = GetChild(target_name, OpenMode::kReadOnly);
           child->GetData()->AddBaseFromParent(base_child);
         }
       } else if (edit_type == static_cast<unsigned int>(CommandType::kDelete)) {
         if (IsChildOpened(target_name)) {
-          auto child_data = GetChildObject(target_name)->GetData();
+          auto child_data = GetChild(target_name, OpenMode::kReadOnly)->GetData();
           child_data->impl_->RemoveBaseFromChildren(target_path);
           auto& base_list = child_data->impl_->base_info_from_parent_list_;
           auto itr = std::find_if(
@@ -1477,9 +1473,10 @@ CommandExecuterSp ObjectData::Impl::Executer() const {
 
 ObjectData* ObjectData::Impl::ChildData(const std::string& name,
                                         bool open_if_not_opened) const {
-  auto child = owner_->GetObject(obj_path_.ChildPath(name));
+  auto child = owner_->GetObject(obj_path_.ChildPath(name),
+                                 OpenMode::kReadOnly);
   if (!child && open_if_not_opened)
-    child = owner_->OpenObject(obj_path_.ChildPath(name));
+    child = owner_->OpenObject(obj_path_.ChildPath(name), OpenMode::kReadOnly);
   if (!child)
     return nullptr;
   return child->GetData();
@@ -1628,16 +1625,12 @@ void ObjectData::UnsetChildFlat(const std::string& name) {
   impl_->UnsetChildFlat(name);
 }  
 
-DObjectSp ObjectData::GetChildObject(size_t index) const {
-  return impl_->GetChildObject(index);
+DObjectSp ObjectData::GetChild(const std::string& name, OpenMode mode) const {
+  return impl_->GetChild(name, mode);
 }
 
-DObjectSp ObjectData::GetChildObject(const std::string& name) const {
-  return impl_->GetChildObject(name);
-}
-
-DObjectSp ObjectData::OpenChildObject(const std::string& name) const {
-  return impl_->OpenChildObject(name);
+DObjectSp ObjectData::OpenChild(const std::string& name, OpenMode mode) const {
+  return impl_->OpenChild(name, mode);
 }
 
 DObjectSp ObjectData::CreateChild(const std::string& name,
@@ -1698,8 +1691,8 @@ void ObjectData::AddBase(const DObjectSp& base) {
   impl_->AddBase(base);
 }
 
-std::vector<DObjectSp> ObjectData::BaseObjects() const {
-  return impl_->BaseObjects();
+std::vector<DObjectSp> ObjectData::Bases() const {
+  return impl_->Bases();
 }
 
 void ObjectData::RemoveBase(const DObjectSp& base) {
@@ -1710,8 +1703,8 @@ void ObjectData::AddBaseFromParent(const DObjectSp& base) {
   impl_->AddBaseFromParent(base);
 }
 
-std::vector<DObjectSp> ObjectData::BaseObjectsFromParent() const {
-  return impl_->BaseObjectsFromParent();
+std::vector<DObjectSp> ObjectData::BasesFromParent() const {
+  return impl_->BasesFromParent();
 }
 
 std::vector<DObjectSp> ObjectData::EffectiveBases() const {
@@ -1786,8 +1779,7 @@ DObjectSp ObjectData::ExecCreateChild(const std::string& name,
   impl_->EmitSignal(cmd, ListenerCallPoint::kPre);
   DObjectSp child;
   if (HasLocalChild(name)) {
-    child = impl_->Owner()->OpenObject(child_path);
-    child->SetEditable();
+    child = impl_->Owner()->OpenObject(child_path, OpenMode::kEditable);
   } else {
     child = impl_->Owner()->CreateObjectImpl(child_path, type, is_flattened);
     if (is_flattened)
@@ -1847,7 +1839,7 @@ void ObjectData::Load() {
 }
 
 ObjectData* ObjectData::GetDataAt(const DObjPath& obj_path) {
-  return impl_->GetObject(obj_path)->GetData();
+  return impl_->GetObjectByPath(obj_path, OpenMode::kReadOnly)->GetData();
 }
 
 ConstSessionPtr ObjectData::GetSession() const {

@@ -72,6 +72,7 @@ extern const int kErrWorkspaceFilePathNotSet;
 extern const int kErrTopObjectDoesNotExist;
 extern const int kErrObjectExpired;
 extern const int kErrObjectIsNotEditable;
+extern const int kErrChildIndexOutOfRange;
 extern const int kErrInvalidObjectString;
 extern const int kErrNoRedoEntry;
 extern const int kErrNoUndoEntry;
