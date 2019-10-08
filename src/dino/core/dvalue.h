@@ -88,7 +88,7 @@ inline bool operator==(const DValue& lhs, const char* rhs) {
 }
 
 inline bool operator==(const char* lhs, const DValue& rhs) {
-  return rhs == lhs;
+  return rhs == std::string(lhs);
 }
 
 inline bool operator!=(const DValue& lhs, const char* rhs) {
