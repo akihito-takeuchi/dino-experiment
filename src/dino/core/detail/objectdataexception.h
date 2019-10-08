@@ -34,6 +34,7 @@ extern const int kErrExpiredObjectToBase;
 extern const int kErrNotBaseObject;
 extern const int kErrCommandStackAlreadyEnabled;
 extern const int kErrObjectIsNotActual;
+extern const int kErrAttrDoesNotExist;
 
 }  // namespace detail
 

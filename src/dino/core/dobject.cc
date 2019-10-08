@@ -7,6 +7,7 @@
 #include <boost/filesystem.hpp>
 
 #include "dino/core/detail/objectdata.h"
+#include "dino/core/detail/objectdataexception.h"
 #include "dino/core/dobjectexception.h"
 
 namespace fs = boost::filesystem;
@@ -121,6 +122,52 @@ DObjPath DObject::Where(const std::string& key) const {
 
 std::vector<std::string> DObject::Keys(bool local_only) const {
   return impl_->GetRawData()->Keys(local_only);
+}
+
+bool DObject::HasAttr(const std::string& key) const {
+  return impl_->GetRawData()->HasAttr(key);
+}
+
+std::string DObject::Attr(const std::string& key) const {
+  return impl_->GetRawData()->Attr(key);
+}
+
+std::map<std::string, std::string> DObject::Attrs() const {
+  return impl_->GetRawData()->Attrs();
+}
+
+void DObject::SetTemporaryAttr(const std::string& key,
+                               const std::string& value) {
+  impl_->GetRawData()->SetTemporaryAttr(key, value);
+}
+
+void DObject::SetAttr(const std::string& key, const std::string& value) {
+  REQUIRE_EDITABLE();
+  impl_->GetRawData()->SetAttr(key, value);
+}
+
+void DObject::RemoveAttr(const std::string& key) {
+  if (!HasAttr(key))
+    BOOST_THROW_EXCEPTION(
+        DObjectException(detail::kErrAttrDoesNotExist)
+        << ExpInfo1(Path().String()) << ExpInfo2(key));
+
+  if (HasPersistentAttr(key))
+    REQUIRE_EDITABLE();
+  impl_->GetRawData()->RemoveAttr(key);
+}
+
+bool DObject::IsTemporaryAttr(const std::string& key) const {
+  return impl_->GetRawData()->IsTemporaryAttr(key);
+}
+
+bool DObject::HasPersistentAttr(const std::string& key) const {
+  return impl_->GetRawData()->HasPersistentAttr(key);
+}
+
+void DObject::SetAllAttrsToBeSaved() {
+  REQUIRE_EDITABLE();
+  impl_->GetRawData()->SetAllAttrsToBeSaved();
 }
 
 std::string DObject::Name() const {

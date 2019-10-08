@@ -177,6 +177,16 @@ class ObjectData::Impl {
   DObjPath Where(const std::string& key) const;
   std::vector<std::string> Keys(bool local_only) const;
 
+  bool HasAttr(const std::string& key) const;
+  std::string Attr(const std::string& key) const;
+  std::map<std::string, std::string> Attrs() const;
+  void SetTemporaryAttr(const std::string& key, const std::string& value);
+  void SetAllAttrsToBeSaved();
+  void SetAttr(const std::string& key, const std::string& value);
+  void RemoveAttr(const std::string& key);
+  bool IsTemporaryAttr(const std::string& key) const;
+  bool HasPersistentAttr(const std::string& key) const;
+
   std::string Type() const;
   FsPath DirPath() const;
   DObjPath Path() const;
@@ -299,6 +309,7 @@ class ObjectData::Impl {
 
   DValueDict values_;
   DValueDict attrs_;
+  DValueDict temp_attrs_;
 
   std::vector<DObjInfo> local_children_;
   mutable std::vector<DObjInfo> children_;
@@ -489,6 +500,68 @@ std::vector<std::string> ObjectData::Impl::Keys(bool local_only) const {
   result.reserve(keys.size());
   std::copy(keys.begin(), keys.end(), std::back_inserter(result));
   return result;
+}
+
+bool ObjectData::Impl::HasAttr(const std::string& key) const {
+  for (auto& attrs : {attrs_, temp_attrs_}) {
+    auto itr = attrs.find(key);
+    if (itr != attrs.cend())
+      return true;
+  }
+  return false;
+}
+
+std::string ObjectData::Impl::Attr(const std::string& key) const {
+  for (auto& attrs : {temp_attrs_, attrs_}) {
+    auto itr = attrs.find(key);
+    if (itr != attrs.cend())
+      return boost::get<std::string>(itr->second);
+  }
+  BOOST_THROW_EXCEPTION(
+      ObjectDataException(kErrAttrDoesNotExist)
+      << ExpInfo1(Path().String()) << ExpInfo2(key));
+}
+
+std::map<std::string, std::string> ObjectData::Impl::Attrs() const {
+  std::map<std::string, std::string> result;
+  for (auto& attrs : {attrs_, temp_attrs_})
+    for (auto& kv : attrs)
+      result[kv.first] = boost::get<std::string>(kv.second);
+  return result;
+}
+
+void ObjectData::Impl::SetTemporaryAttr(const std::string& key,
+                                        const std::string& value) {
+  temp_attrs_[key] = value;
+}
+
+void ObjectData::Impl::SetAttr(const std::string& key, const std::string& value) {
+  attrs_[key] = value;
+  auto itr = temp_attrs_.find(key);
+  if (itr != temp_attrs_.end())
+    temp_attrs_.erase(itr);
+}
+
+void ObjectData::Impl::SetAllAttrsToBeSaved() {
+  for (auto& kv : temp_attrs_)
+    attrs_[kv.first] = kv.second;
+  temp_attrs_.clear();
+}
+
+void ObjectData::Impl::RemoveAttr(const std::string& key) {
+  for (auto attrs : {&attrs_, &temp_attrs_}) {
+    auto itr = attrs->find(key);
+    if (itr != attrs->end())
+      attrs->erase(key);
+  }
+}
+
+bool ObjectData::Impl::IsTemporaryAttr(const std::string& key) const {
+  return temp_attrs_.find(key) != temp_attrs_.cend();
+}
+
+bool ObjectData::Impl::HasPersistentAttr(const std::string& key) const {
+  return attrs_.find(key) != attrs_.cend();
 }
 
 std::string ObjectData::Impl::Type() const {
@@ -1564,6 +1637,42 @@ std::vector<std::string> ObjectData::Keys(bool local_only) const {
   return impl_->Keys(local_only);
 }
 
+bool ObjectData::HasAttr(const std::string& key) const {
+  return impl_->HasAttr(key);
+}
+
+std::string ObjectData::Attr(const std::string& key) const {
+  return impl_->Attr(key);
+}
+
+std::map<std::string, std::string> ObjectData::Attrs() const {
+  return impl_->Attrs();
+}
+
+void ObjectData::SetTemporaryAttr(const std::string& key,
+                                  const std::string& value) {
+  impl_->SetTemporaryAttr(key, value);
+}
+
+void ObjectData::SetAttr(const std::string& key, const std::string& value) {
+  impl_->SetAttr(key, value);
+}
+
+void ObjectData::SetAllAttrsToBeSaved() {
+  impl_->SetAllAttrsToBeSaved();
+}
+
+void ObjectData::RemoveAttr(const std::string& key) {
+  impl_->RemoveAttr(key);
+}
+
+bool ObjectData::IsTemporaryAttr(const std::string& key) const {
+  return impl_->IsTemporaryAttr(key);
+}
+
+bool ObjectData::HasPersistentAttr(const std::string& key) const {
+  return impl_->HasPersistentAttr(key);
+}
 
 std::string ObjectData::Type() const {
   return impl_->Type();

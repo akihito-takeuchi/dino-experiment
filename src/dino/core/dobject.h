@@ -4,6 +4,8 @@
 #pragma once
 
 #include <memory>
+#include <string>
+#include <map>
 
 #include "dino/core/filetypes.h"
 #include "dino/core/fspath.h"
@@ -39,6 +41,16 @@ class DObject {
   bool IsLocal(const std::string& key) const;
   DObjPath Where(const std::string& key) const;
   std::vector<std::string> Keys(bool local_only=false) const;
+
+  bool HasAttr(const std::string& key) const;
+  std::string Attr(const std::string& key) const;
+  std::map<std::string, std::string> Attrs() const;
+  void SetTemporaryAttr(const std::string& key, const std::string& value);
+  void SetAttr(const std::string& key, const std::string& value);
+  void RemoveAttr(const std::string& key);
+  bool IsTemporaryAttr(const std::string& key) const;
+  bool HasPersistentAttr(const std::string& key) const;
+  void SetAllAttrsToBeSaved();
 
   std::string Name() const;
   std::string Type() const;
