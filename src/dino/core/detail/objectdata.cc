@@ -536,6 +536,8 @@ void ObjectData::Impl::SetTemporaryAttr(const std::string& key,
 }
 
 void ObjectData::Impl::SetAttr(const std::string& key, const std::string& value) {
+  SetIsActual(true);
+  SetDirty(true);
   attrs_[key] = value;
   auto itr = temp_attrs_.find(key);
   if (itr != temp_attrs_.end())
@@ -543,12 +545,22 @@ void ObjectData::Impl::SetAttr(const std::string& key, const std::string& value)
 }
 
 void ObjectData::Impl::SetAllAttrsToBeSaved() {
-  for (auto& kv : temp_attrs_)
+  bool already_actual = IsActual();
+  for (auto& kv : temp_attrs_) {
+    if (!already_actual) {
+      SetIsActual(true);
+      SetDirty(true);
+      already_actual = true;
+    }
     attrs_[kv.first] = kv.second;
+  }
   temp_attrs_.clear();
 }
 
 void ObjectData::Impl::RemoveAttr(const std::string& key) {
+  if (HasPersistentAttr(key)) {
+    SetDirty(true);
+  }
   for (auto attrs : {&attrs_, &temp_attrs_}) {
     auto itr = attrs->find(key);
     if (itr != attrs->end())
