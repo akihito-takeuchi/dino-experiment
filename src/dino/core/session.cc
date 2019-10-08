@@ -512,6 +512,7 @@ void Session::Impl::OpenDataAtPath(
       if (base_of_parent->HasChild(name)) {
         auto base = base_of_parent->OpenChild(name, OpenMode::kReadOnly);
         data->AddBaseFromParent(base);
+        data->SetDirty(false);
       }
     }
   }

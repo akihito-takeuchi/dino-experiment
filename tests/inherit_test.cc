@@ -512,6 +512,7 @@ TEST_F(InheritTest, DeepInheritance) {
     ASSERT_EQ(children[1].Name(), kChildName2);
     auto c1 = top->OpenChild(kChildName1);
     ASSERT_FALSE(c1->IsActual());
+    ASSERT_FALSE(c1->IsDirty());
     ASSERT_EQ(c1->Name(), std::string(kChildName1));
     ASSERT_EQ(c1->Path(), dc::DObjPath(fmt::format("{}/{}", kTopName2, kChildName1)));
     ASSERT_EQ(c1->Get("key1"), std::string("child1"));
@@ -522,6 +523,7 @@ TEST_F(InheritTest, DeepInheritance) {
     auto c3 = c1->OpenChild(kChildName3);
     ASSERT_EQ(c3->ChildCount(), 0u);
     ASSERT_EQ(c3->Get("key2"), 10.0);
+    ASSERT_FALSE(c3->IsDirty());
     top->Save(true);
     session->Save();
   }
