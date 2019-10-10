@@ -41,8 +41,8 @@ class ObjectData {
   DValue Get(const std::string& key) const;
   void Put(const std::string& key, const DValue& value);
   void RemoveKey(const std::string& key);
-  bool IsLocal(const std::string& key) const;
-  DObjPath Where(const std::string& key) const;
+  bool IsLocalKey(const std::string& key) const;
+  DObjPath WhereIsKey(const std::string& key) const;
   std::vector<std::string> Keys(bool local_only=false) const;
 
   bool HasAttr(const std::string& key) const;
@@ -61,8 +61,8 @@ class ObjectData {
 
   bool IsActual() const;
   bool HasChild(const std::string& name) const;
-  bool HasLocalChild(const std::string& name) const;
-  bool IsLocalChild(const std::string& name) const;
+  bool HasActualChild(const std::string& name) const;
+  bool IsActualChild(const std::string& name) const;
   bool IsChildOpened(const std::string& name) const;
   std::vector<DObjInfo> Children() const;
   DObjInfo ChildInfo(const std::string& name) const;
@@ -124,7 +124,7 @@ class ObjectData {
                        Session* owner,
                        bool is_flattened,
                        bool init_directory = true,
-                       bool is_local = true);
+                       bool is_actual = true);
   static DataSp Open(const DObjPath& obj_path,
                      const FsPath& dir_path,
                      ObjectData* parent,
@@ -158,7 +158,7 @@ class ObjectData {
              Session* owner,
              bool is_flattened = false,
              bool init_directory = true,
-             bool is_local = true);
+             bool is_actual = true);
   ObjectData(const FsPath& dir_path,
              const DObjPath& obj_path,
              const std::string& type,

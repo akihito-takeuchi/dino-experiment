@@ -14,8 +14,8 @@ namespace core {
 
 DObjInfo::DObjInfo() = default;
 
-DObjInfo::DObjInfo(const DObjPath& path, const std::string& type, bool is_local)
-    : path_(path), name_(path.LeafName()), type_(type), is_local_(is_local) {
+DObjInfo::DObjInfo(const DObjPath& path, const std::string& type, bool is_actual)
+    : path_(path), name_(path.LeafName()), type_(type), is_actual_(is_actual) {
 }
 
 DObjInfo::~DObjInfo() = default;
@@ -55,12 +55,12 @@ bool DObjInfo::IsValid() const {
       && DObjPath::IsValidName(type_);
 }
 
-bool DObjInfo::IsLocal() const {
-  return is_local_;
+bool DObjInfo::IsActual() const {
+  return is_actual_;
 }
 
-void DObjInfo::SetIsLocal(bool is_local) {
-  is_local_ = is_local;
+void DObjInfo::SetIsActual(bool is_actual) {
+  is_actual_ = is_actual;
 }
 
 std::string DObjInfo::ToString(bool name_only) const {
@@ -89,7 +89,7 @@ bool DObjInfo::operator==(const DObjInfo& rhs) const {
       path_ == rhs.path_
       && name_ == rhs.name_
       && type_ == rhs.type_
-      && is_local_ == rhs.is_local_;
+      && is_actual_ == rhs.is_actual_;
 }
 
 bool operator<(const DObjInfo& lhs, const DObjInfo& rhs) {

@@ -39,7 +39,7 @@ std::ostream& operator<<(std::ostream& os, const DObjInfo& info) {
   os << "DObjInfo(" << info.Name() << "," << info.Type() << ","
      << info.Path().String() << ","
      << (info.IsValid() ? "valid" : "invalid") <<  ","
-     << (info.IsLocal() ? "local" : "remote") << ")\n";
+     << (info.IsActual() ? "local" : "remote") << ")\n";
   return os;
 }
 
@@ -85,8 +85,8 @@ TEST_F(InheritTest, SimpleIneritance) {
   ASSERT_TRUE(child1->HasKey("test"));
   ASSERT_EQ(child1->Get("test"), 100);
   ASSERT_EQ(child2->Get("test"), 100);
-  ASSERT_EQ(child1->Where("test"), path2);
-  ASSERT_FALSE(child1->IsLocal("test"));
+  ASSERT_EQ(child1->WhereIsKey("test"), path2);
+  ASSERT_FALSE(child1->IsLocalKey("test"));
   ASSERT_EQ(child1->Bases().size(), 1u);
   ASSERT_EQ(child1->Bases()[0]->Path(), child2->Path());
   ASSERT_NE(child1->Bases()[0]->Path(), child1->Path());
@@ -96,21 +96,21 @@ TEST_F(InheritTest, SimpleIneritance) {
   ASSERT_TRUE(child1->HasKey("test"));
   ASSERT_EQ(child1->Get("test"), 200);
   ASSERT_EQ(child2->Get("test"), 100);
-  ASSERT_EQ(child1->Where("test"), path1);
-  ASSERT_TRUE(child1->IsLocal("test"));
+  ASSERT_EQ(child1->WhereIsKey("test"), path1);
+  ASSERT_TRUE(child1->IsLocalKey("test"));
 
   child1->RemoveBase(child2);
   ASSERT_TRUE(child1->HasKey("test"));
   ASSERT_EQ(child1->Get("test"), 200);
   ASSERT_EQ(child2->Get("test"), 100);
-  ASSERT_EQ(child1->Where("test"), path1);
-  ASSERT_TRUE(child1->IsLocal("test"));
+  ASSERT_EQ(child1->WhereIsKey("test"), path1);
+  ASSERT_TRUE(child1->IsLocalKey("test"));
   ASSERT_EQ(child1->Bases().size(), 0u);
   ASSERT_EQ(child2->Bases().size(), 0u);
 
   child1->RemoveKey("test");
   ASSERT_THROW(child1->Get("test"), dc::DException);
-  ASSERT_THROW(child1->Where("test"), dc::DException); 
+  ASSERT_THROW(child1->WhereIsKey("test"), dc::DException); 
 }
 
 TEST_F(InheritTest, LoadSaveInerited) {
@@ -130,12 +130,12 @@ TEST_F(InheritTest, LoadSaveInerited) {
     child2->Put("test2", 300);
     ASSERT_TRUE(child1->HasKey("test1"));
     ASSERT_TRUE(child1->HasKey("test2"));
-    ASSERT_TRUE(child1->IsLocal("test1"));
-    ASSERT_FALSE(child1->IsLocal("test2"));
+    ASSERT_TRUE(child1->IsLocalKey("test1"));
+    ASSERT_FALSE(child1->IsLocalKey("test2"));
     ASSERT_TRUE(child2->HasKey("test1"));
     ASSERT_TRUE(child2->HasKey("test2"));
-    ASSERT_TRUE(child1->IsLocal("test1"));
-    ASSERT_TRUE(child2->IsLocal("test2"));
+    ASSERT_TRUE(child1->IsLocalKey("test1"));
+    ASSERT_TRUE(child2->IsLocalKey("test2"));
     ASSERT_EQ(child1->Get("test1"), 100);
     ASSERT_EQ(child1->Get("test2"), 300);
     ASSERT_EQ(child2->Get("test1"), 200);
@@ -174,12 +174,12 @@ TEST_F(InheritTest, PurgeBase) {
 
     ASSERT_TRUE(child1->HasKey("test1"));
     ASSERT_TRUE(child1->HasKey("test2"));
-    ASSERT_TRUE(child1->IsLocal("test1"));
-    ASSERT_FALSE(child1->IsLocal("test2"));
+    ASSERT_TRUE(child1->IsLocalKey("test1"));
+    ASSERT_FALSE(child1->IsLocalKey("test2"));
     ASSERT_TRUE(child2->HasKey("test1"));
     ASSERT_TRUE(child2->HasKey("test2"));
-    ASSERT_TRUE(child1->IsLocal("test1"));
-    ASSERT_TRUE(child2->IsLocal("test2"));
+    ASSERT_TRUE(child1->IsLocalKey("test1"));
+    ASSERT_TRUE(child2->IsLocalKey("test2"));
     ASSERT_EQ(child1->Get("test1"), 100);
     ASSERT_EQ(child1->Get("test2"), 300);
     ASSERT_EQ(child2->Get("test1"), 200);
@@ -189,9 +189,9 @@ TEST_F(InheritTest, PurgeBase) {
     session->PurgeObject(child2->Path());
     ASSERT_TRUE(child1->HasKey("test1"));
     ASSERT_TRUE(child1->HasKey("test2"));
-    ASSERT_TRUE(child1->IsLocal("test1"));
-    ASSERT_FALSE(child1->IsLocal("test2"));
-    ASSERT_TRUE(child1->IsLocal("test1"));
+    ASSERT_TRUE(child1->IsLocalKey("test1"));
+    ASSERT_FALSE(child1->IsLocalKey("test2"));
+    ASSERT_TRUE(child1->IsLocalKey("test1"));
     ASSERT_EQ(child1->Get("test1"), 100);
     ASSERT_EQ(child1->Get("test2"), 300);
   }
@@ -229,15 +229,15 @@ TEST_F(InheritTest, InheritedChildren) {
   
   ASSERT_TRUE(parent1->HasChild(kChildName1));
   ASSERT_TRUE(parent1->HasChild(kChildName2));
-  ASSERT_TRUE(parent1->IsLocalChild(kChildName1));
-  ASSERT_FALSE(parent1->IsLocalChild(kChildName2));
+  ASSERT_TRUE(parent1->IsActualChild(kChildName1));
+  ASSERT_FALSE(parent1->IsActualChild(kChildName2));
  
   ASSERT_FALSE(parent2->HasChild(kChildName1));
   ASSERT_TRUE(parent2->HasChild(kChildName2));
-  ASSERT_THROW(parent2->IsLocalChild(kChildName1), dc::DException);
-  ASSERT_TRUE(parent2->IsLocalChild(kChildName2));
+  ASSERT_THROW(parent2->IsActualChild(kChildName1), dc::DException);
+  ASSERT_TRUE(parent2->IsActualChild(kChildName2));
 
-  ASSERT_THROW(parent1->IsLocalChild(kChildName3), dc::DException);
+  ASSERT_THROW(parent1->IsActualChild(kChildName3), dc::DException);
   
   parent1->CreateChild(kChildName2, "child");
   ASSERT_EQ(parent1->Children().size(), 2u);
@@ -245,15 +245,15 @@ TEST_F(InheritTest, InheritedChildren) {
 
   ASSERT_TRUE(parent1->HasChild(kChildName1));
   ASSERT_TRUE(parent1->HasChild(kChildName2));
-  ASSERT_TRUE(parent1->IsLocalChild(kChildName1));
-  ASSERT_TRUE(parent1->IsLocalChild(kChildName2));
+  ASSERT_TRUE(parent1->IsActualChild(kChildName1));
+  ASSERT_TRUE(parent1->IsActualChild(kChildName2));
   
   ASSERT_FALSE(parent2->HasChild(kChildName1));
   ASSERT_TRUE(parent2->HasChild(kChildName2));
-  ASSERT_THROW(parent2->IsLocalChild(kChildName1), dc::DException);
-  ASSERT_TRUE(parent2->IsLocalChild(kChildName2));
+  ASSERT_THROW(parent2->IsActualChild(kChildName1), dc::DException);
+  ASSERT_TRUE(parent2->IsActualChild(kChildName2));
 
-  ASSERT_THROW(parent1->IsLocalChild(kChildName3), dc::DException);
+  ASSERT_THROW(parent1->IsActualChild(kChildName3), dc::DException);
   
   parent2->CreateChild(kChildName3, "child");
   ASSERT_EQ(parent1->Children().size(), 3u);
@@ -262,16 +262,16 @@ TEST_F(InheritTest, InheritedChildren) {
   ASSERT_TRUE(parent1->HasChild(kChildName1));
   ASSERT_TRUE(parent1->HasChild(kChildName2));
   ASSERT_TRUE(parent1->HasChild(kChildName3));
-  ASSERT_TRUE(parent1->IsLocalChild(kChildName1));
-  ASSERT_TRUE(parent1->IsLocalChild(kChildName2));
-  ASSERT_FALSE(parent1->IsLocalChild(kChildName3));
+  ASSERT_TRUE(parent1->IsActualChild(kChildName1));
+  ASSERT_TRUE(parent1->IsActualChild(kChildName2));
+  ASSERT_FALSE(parent1->IsActualChild(kChildName3));
   
   ASSERT_FALSE(parent2->HasChild(kChildName1));
   ASSERT_TRUE(parent2->HasChild(kChildName2));
   ASSERT_TRUE(parent2->HasChild(kChildName3));
-  ASSERT_THROW(parent2->IsLocalChild(kChildName1), dc::DException);
-  ASSERT_TRUE(parent2->IsLocalChild(kChildName2));
-  ASSERT_TRUE(parent2->IsLocalChild(kChildName3));
+  ASSERT_THROW(parent2->IsActualChild(kChildName1), dc::DException);
+  ASSERT_TRUE(parent2->IsActualChild(kChildName2));
+  ASSERT_TRUE(parent2->IsActualChild(kChildName3));
 
   ASSERT_EQ(parent1->Children()[0].Name(), kChildName1);
   ASSERT_EQ(parent1->Children()[1].Name(), kChildName2);
@@ -289,9 +289,9 @@ TEST_F(InheritTest, InheritedChildren) {
   ASSERT_TRUE(parent1->HasChild(kChildName1));
   ASSERT_TRUE(parent1->HasChild(kChildName2));
   ASSERT_TRUE(parent1->HasChild(kChildName3));
-  ASSERT_TRUE(parent1->IsLocalChild(kChildName1));
-  ASSERT_TRUE(parent1->IsLocalChild(kChildName2));
-  ASSERT_FALSE(parent1->IsLocalChild(kChildName3));
+  ASSERT_TRUE(parent1->IsActualChild(kChildName1));
+  ASSERT_TRUE(parent1->IsActualChild(kChildName2));
+  ASSERT_FALSE(parent1->IsActualChild(kChildName3));
 }
 
 // Command stack version
@@ -329,8 +329,8 @@ TEST_F(InheritTestWithCommandStack, SimpleIneritance) {
   ASSERT_TRUE(child1->HasKey("test"));
   ASSERT_EQ(child1->Get("test"), 100);
   ASSERT_EQ(child2->Get("test"), 100);
-  ASSERT_EQ(child1->Where("test"), path2);
-  ASSERT_FALSE(child1->IsLocal("test"));
+  ASSERT_EQ(child1->WhereIsKey("test"), path2);
+  ASSERT_FALSE(child1->IsLocalKey("test"));
   ASSERT_EQ(child1->Bases().size(), 1u);
   ASSERT_EQ(child1->Bases()[0]->Path(), child2->Path());
   ASSERT_NE(child1->Bases()[0]->Path(), child1->Path());
@@ -340,21 +340,21 @@ TEST_F(InheritTestWithCommandStack, SimpleIneritance) {
   ASSERT_TRUE(child1->HasKey("test"));
   ASSERT_EQ(child1->Get("test"), 200);
   ASSERT_EQ(child2->Get("test"), 100);
-  ASSERT_EQ(child1->Where("test"), path1);
-  ASSERT_TRUE(child1->IsLocal("test"));
+  ASSERT_EQ(child1->WhereIsKey("test"), path1);
+  ASSERT_TRUE(child1->IsLocalKey("test"));
 
   child1->RemoveBase(child2);
   ASSERT_TRUE(child1->HasKey("test"));
   ASSERT_EQ(child1->Get("test"), 200);
   ASSERT_EQ(child2->Get("test"), 100);
-  ASSERT_EQ(child1->Where("test"), path1);
-  ASSERT_TRUE(child1->IsLocal("test"));
+  ASSERT_EQ(child1->WhereIsKey("test"), path1);
+  ASSERT_TRUE(child1->IsLocalKey("test"));
   ASSERT_EQ(child1->Bases().size(), 0u);
   ASSERT_EQ(child2->Bases().size(), 0u);
 
   child1->RemoveKey("test");
   ASSERT_THROW(child1->Get("test"), dc::DException);
-  ASSERT_THROW(child1->Where("test"), dc::DException);
+  ASSERT_THROW(child1->WhereIsKey("test"), dc::DException);
 }
 
 TEST_F(InheritTestWithCommandStack, InheritedChildren) {
@@ -390,15 +390,15 @@ TEST_F(InheritTestWithCommandStack, InheritedChildren) {
   
   ASSERT_TRUE(parent1->HasChild(kChildName1));
   ASSERT_TRUE(parent1->HasChild(kChildName2));
-  ASSERT_TRUE(parent1->IsLocalChild(kChildName1));
-  ASSERT_FALSE(parent1->IsLocalChild(kChildName2));
+  ASSERT_TRUE(parent1->IsActualChild(kChildName1));
+  ASSERT_FALSE(parent1->IsActualChild(kChildName2));
  
   ASSERT_FALSE(parent2->HasChild(kChildName1));
   ASSERT_TRUE(parent2->HasChild(kChildName2));
-  ASSERT_THROW(parent2->IsLocalChild(kChildName1), dc::DException);
-  ASSERT_TRUE(parent2->IsLocalChild(kChildName2));
+  ASSERT_THROW(parent2->IsActualChild(kChildName1), dc::DException);
+  ASSERT_TRUE(parent2->IsActualChild(kChildName2));
 
-  ASSERT_THROW(parent1->IsLocalChild(kChildName3), dc::DException);
+  ASSERT_THROW(parent1->IsActualChild(kChildName3), dc::DException);
   
   parent1->CreateChild(kChildName2, "child");
   ASSERT_EQ(parent1->Children().size(), 2u);
@@ -406,15 +406,15 @@ TEST_F(InheritTestWithCommandStack, InheritedChildren) {
 
   ASSERT_TRUE(parent1->HasChild(kChildName1));
   ASSERT_TRUE(parent1->HasChild(kChildName2));
-  ASSERT_TRUE(parent1->IsLocalChild(kChildName1));
-  ASSERT_TRUE(parent1->IsLocalChild(kChildName2));
+  ASSERT_TRUE(parent1->IsActualChild(kChildName1));
+  ASSERT_TRUE(parent1->IsActualChild(kChildName2));
   
   ASSERT_FALSE(parent2->HasChild(kChildName1));
   ASSERT_TRUE(parent2->HasChild(kChildName2));
-  ASSERT_THROW(parent2->IsLocalChild(kChildName1), dc::DException);
-  ASSERT_TRUE(parent2->IsLocalChild(kChildName2));
+  ASSERT_THROW(parent2->IsActualChild(kChildName1), dc::DException);
+  ASSERT_TRUE(parent2->IsActualChild(kChildName2));
 
-  ASSERT_THROW(parent1->IsLocalChild(kChildName3), dc::DException);
+  ASSERT_THROW(parent1->IsActualChild(kChildName3), dc::DException);
   
   parent2->CreateChild(kChildName3, "child");
   ASSERT_EQ(parent1->Children().size(), 3u);
@@ -423,16 +423,16 @@ TEST_F(InheritTestWithCommandStack, InheritedChildren) {
   ASSERT_TRUE(parent1->HasChild(kChildName1));
   ASSERT_TRUE(parent1->HasChild(kChildName2));
   ASSERT_TRUE(parent1->HasChild(kChildName3));
-  ASSERT_TRUE(parent1->IsLocalChild(kChildName1));
-  ASSERT_TRUE(parent1->IsLocalChild(kChildName2));
-  ASSERT_FALSE(parent1->IsLocalChild(kChildName3));
+  ASSERT_TRUE(parent1->IsActualChild(kChildName1));
+  ASSERT_TRUE(parent1->IsActualChild(kChildName2));
+  ASSERT_FALSE(parent1->IsActualChild(kChildName3));
   
   ASSERT_FALSE(parent2->HasChild(kChildName1));
   ASSERT_TRUE(parent2->HasChild(kChildName2));
   ASSERT_TRUE(parent2->HasChild(kChildName3));
-  ASSERT_THROW(parent2->IsLocalChild(kChildName1), dc::DException);
-  ASSERT_TRUE(parent2->IsLocalChild(kChildName2));
-  ASSERT_TRUE(parent2->IsLocalChild(kChildName3));
+  ASSERT_THROW(parent2->IsActualChild(kChildName1), dc::DException);
+  ASSERT_TRUE(parent2->IsActualChild(kChildName2));
+  ASSERT_TRUE(parent2->IsActualChild(kChildName3));
 
   ASSERT_EQ(parent1->Children()[0].Name(), kChildName1);
   ASSERT_EQ(parent1->Children()[1].Name(), kChildName2);
@@ -450,9 +450,9 @@ TEST_F(InheritTestWithCommandStack, InheritedChildren) {
   ASSERT_TRUE(parent1->HasChild(kChildName1));
   ASSERT_TRUE(parent1->HasChild(kChildName2));
   ASSERT_TRUE(parent1->HasChild(kChildName3));
-  ASSERT_TRUE(parent1->IsLocalChild(kChildName1));
-  ASSERT_TRUE(parent1->IsLocalChild(kChildName2));
-  ASSERT_FALSE(parent1->IsLocalChild(kChildName3));
+  ASSERT_TRUE(parent1->IsActualChild(kChildName1));
+  ASSERT_TRUE(parent1->IsActualChild(kChildName2));
+  ASSERT_FALSE(parent1->IsActualChild(kChildName3));
 }
 
 TEST_F(InheritTest, DeepInheritance) {
@@ -536,12 +536,12 @@ TEST_F(InheritTest, DeepInheritance) {
     ASSERT_EQ(top->ChildCount(), 2u);
     ASSERT_EQ(children[0].Name(), kChildName1);
     ASSERT_EQ(children[1].Name(), kChildName2);
-    ASSERT_FALSE(children[0].IsLocal());
-    ASSERT_FALSE(children[1].IsLocal());
+    ASSERT_FALSE(children[0].IsActual());
+    ASSERT_FALSE(children[1].IsActual());
     auto c1 = top->OpenChild(kChildName1);
     ASSERT_FALSE(c1->IsActual());
     ASSERT_EQ(top->ChildInfo(kChildName1), children[0]);
-    ASSERT_FALSE(top->ChildInfo(kChildName1).IsLocal());
+    ASSERT_FALSE(top->ChildInfo(kChildName1).IsActual());
     ASSERT_EQ(c1->Name(), std::string(kChildName1));
     ASSERT_EQ(c1->Path(), dc::DObjPath(fmt::format("{}/{}", kTopName2, kChildName1)));
     ASSERT_EQ(c1->Get("key1"), std::string("child1"));
@@ -558,10 +558,10 @@ TEST_F(InheritTest, DeepInheritance) {
     ASSERT_FALSE(c3->IsActual());
     ASSERT_TRUE(c1->ChildInfo(kChildName3).IsValid());
     ASSERT_FALSE(top->ChildInfo(kChildName3).IsValid());
-    ASSERT_FALSE(top->ChildInfo(kChildName3).IsLocal());
+    ASSERT_FALSE(top->ChildInfo(kChildName3).IsActual());
     c3->Put("key1", "test");
     c3->Put("key2", 5.0);
-    ASSERT_TRUE(c1->ChildInfo(kChildName3).IsLocal());
+    ASSERT_TRUE(c1->ChildInfo(kChildName3).IsActual());
     ASSERT_TRUE(c3->IsActual());
     ASSERT_EQ(c3->Get("key1"), std::string("test"));
     ASSERT_EQ(c3->Get("key2"), 5.0);
@@ -574,8 +574,8 @@ TEST_F(InheritTest, DeepInheritance) {
     auto c1 = top->OpenChild(kChildName1);
     ASSERT_EQ(top->ChildCount(), 2u);
     auto children = top->Children();
-    ASSERT_TRUE(children[0].IsLocal());
-    ASSERT_FALSE(children[1].IsLocal());
+    ASSERT_TRUE(children[0].IsActual());
+    ASSERT_FALSE(children[1].IsActual());
     ASSERT_TRUE(c1->IsActual());
     ASSERT_EQ(c1->Name(), std::string(kChildName1));
     ASSERT_EQ(c1->Path(), dc::DObjPath(fmt::format("{}/{}", kTopName2, kChildName1)));
@@ -587,16 +587,16 @@ TEST_F(InheritTest, DeepInheritance) {
     ASSERT_EQ(c3->Get("key2"), 5.0);
     auto c2 = top->OpenChild(kChildName2);
     ASSERT_FALSE(c2->IsActual());
-    ASSERT_FALSE(top->ChildInfo(kChildName2).IsLocal());
+    ASSERT_FALSE(top->ChildInfo(kChildName2).IsActual());
     c2->SetEditable();
     c2->Put("key1", 10);
     ASSERT_TRUE(c2->IsActual());
-    ASSERT_TRUE(top->ChildInfo(kChildName2).IsLocal());
+    ASSERT_TRUE(top->ChildInfo(kChildName2).IsActual());
     top->SetEditable();
     top->DeleteChild(kChildName2);
-    ASSERT_FALSE(top->ChildInfo(kChildName2).IsLocal());
+    ASSERT_FALSE(top->ChildInfo(kChildName2).IsActual());
     ASSERT_TRUE(top->HasChild(kChildName2));
-    ASSERT_FALSE(top->HasLocalChild(kChildName2));
+    ASSERT_FALSE(top->HasActualChild(kChildName2));
     ASSERT_THROW(c2->Get("key1"), dc::DException);
     top->Save();
   }
@@ -642,8 +642,8 @@ TEST_F(InheritTest, DeepInheritance) {
     ASSERT_EQ(top2->ChildCount(), 1u);
     top2->AddBase(top1);
     ASSERT_EQ(top2->ChildCount(), 2u);
-    ASSERT_TRUE(top2->ChildInfo(kChildName1).IsLocal());
-    ASSERT_FALSE(top2->ChildInfo(kChildName2).IsLocal());
+    ASSERT_TRUE(top2->ChildInfo(kChildName1).IsActual());
+    ASSERT_FALSE(top2->ChildInfo(kChildName2).IsActual());
     auto c1 = top2->OpenChild(kChildName1);
     auto c3 = c1->OpenChild(kChildName3);
     ASSERT_TRUE(c3->IsActual());

@@ -304,7 +304,7 @@ void CommandStack::StoreChildData(detail::ObjectData* obj,
 void CommandStack::RestoreChildData(detail::ObjectData* obj,
                                     const RemovedDataSp& data) {
   DObjectSp child_obj;
-  if (obj->HasLocalChild(data->name))
+  if (obj->HasActualChild(data->name))
     child_obj = session_->GetObject(
         obj->Path().ChildPath(data->name), OpenMode::kReadOnly);
   else

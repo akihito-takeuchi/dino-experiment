@@ -332,7 +332,7 @@ void Session::Impl::PreNewObjectCheck(const DObjPath& obj_path) const {
         SessionException(kErrParentObjectNotOpened) << name_info);
   }
     
-  if (parent_obj->HasLocalChild(obj_path.LeafName()))
+  if (parent_obj->HasActualChild(obj_path.LeafName()))
     BOOST_THROW_EXCEPTION(
         SessionException(kErrObjectAlreadyExists) << name_info);
 }

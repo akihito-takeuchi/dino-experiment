@@ -112,12 +112,12 @@ void DObject::RemoveKey(const std::string& key) {
   impl_->GetRawData()->RemoveKey(key);
 }
 
-bool DObject::IsLocal(const std::string& key) const {
-  return impl_->GetRawData()->IsLocal(key);
+bool DObject::IsLocalKey(const std::string& key) const {
+  return impl_->GetRawData()->IsLocalKey(key);
 }
 
-DObjPath DObject::Where(const std::string& key) const {
-  return impl_->GetRawData()->Where(key);
+DObjPath DObject::WhereIsKey(const std::string& key) const {
+  return impl_->GetRawData()->WhereIsKey(key);
 }
 
 std::vector<std::string> DObject::Keys(bool local_only) const {
@@ -194,12 +194,12 @@ bool DObject::IsActual() const {
   return impl_->GetRawData()->IsActual();
 }
 
-bool DObject::HasLocalChild(const std::string& name) const {
-  return impl_->GetRawData()->HasLocalChild(name);
+bool DObject::HasActualChild(const std::string& name) const {
+  return impl_->GetRawData()->HasActualChild(name);
 }
 
-bool DObject::IsLocalChild(const std::string& name) const {
-  return impl_->GetRawData()->IsLocalChild(name);
+bool DObject::IsActualChild(const std::string& name) const {
+  return impl_->GetRawData()->IsActualChild(name);
 }
 
 bool DObject::IsChildOpened(const std::string& name) const {

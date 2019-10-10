@@ -38,8 +38,8 @@ class DObject {
   void Put(const std::string& key, const char* str_value);
   void Put(const std::string& key, const DValue& value);
   void RemoveKey(const std::string& key);
-  bool IsLocal(const std::string& key) const;
-  DObjPath Where(const std::string& key) const;
+  bool IsLocalKey(const std::string& key) const;
+  DObjPath WhereIsKey(const std::string& key) const;
   std::vector<std::string> Keys(bool local_only=false) const;
 
   bool HasAttr(const std::string& key) const;
@@ -59,8 +59,8 @@ class DObject {
 
   bool IsActual() const;
   bool HasChild(const std::string& name) const;
-  bool HasLocalChild(const std::string& name) const;
-  bool IsLocalChild(const std::string& name) const;
+  bool HasActualChild(const std::string& name) const;
+  bool IsActualChild(const std::string& name) const;
   bool IsChildOpened(const std::string& name) const;
   std::vector<DObjInfo> Children() const;
   DObjInfo ChildInfo(const std::string& name) const;

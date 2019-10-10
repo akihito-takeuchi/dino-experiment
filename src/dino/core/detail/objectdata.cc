@@ -164,7 +164,7 @@ class ObjectData::Impl {
        Session* owner,
        bool is_flattened,
        bool init_directory,
-       bool is_local);
+       bool is_actual);
   Impl(ObjectData* self,
        const FsPath& dir_path,
        const DObjPath& obj_path,
@@ -178,8 +178,8 @@ class ObjectData::Impl {
   DValue Get(const std::string& key) const;
   void Put(const std::string& key, const DValue& value);
   void RemoveKey(const std::string& key);
-  bool IsLocal(const std::string& key) const;
-  DObjPath Where(const std::string& key) const;
+  bool IsLocalKey(const std::string& key) const;
+  DObjPath WhereIsKey(const std::string& key) const;
   std::vector<std::string> Keys(bool local_only) const;
 
   bool HasAttr(const std::string& key) const;
@@ -199,8 +199,8 @@ class ObjectData::Impl {
   bool IsActual() const;
   void SetIsActual(bool state);
   bool HasChild(const std::string& name) const;
-  bool HasLocalChild(const std::string& name) const;
-  bool IsLocalChild(const std::string& name) const;
+  bool HasActualChild(const std::string& name) const;
+  bool IsActualChild(const std::string& name) const;
   bool IsChildOpened(const std::string& name) const;
   DObjInfo ChildInfo(const std::string& name) const;
   std::vector<DObjInfo> Children() const;
@@ -298,7 +298,7 @@ class ObjectData::Impl {
   void CreateLockFile();
   ObjectData* ChildData(const std::string& name,
                         bool open_if_not_opened) const;
-  void RefreshLocalChildren();
+  void RefreshActualChildren();
   void RefreshChildrenInBase() const;
   void ProcessBaseObjectUpdate(
       const Command& cmd, ListenerCallPoint call_point);
@@ -318,7 +318,7 @@ class ObjectData::Impl {
   DValueDict attrs_;
   DValueDict temp_attrs_;
 
-  std::vector<DObjInfo> local_children_;
+  std::vector<DObjInfo> actual_children_;
   mutable std::vector<DObjInfo> children_;
 
   mutable std::vector<BaseObjInfo> base_info_list_;
@@ -347,11 +347,11 @@ ObjectData::Impl::Impl(ObjectData* self,
                        Session* owner,
                        bool is_flattened,
                        bool init_directory,
-                       bool is_local) :
+                       bool is_actual) :
     self_(self), parent_(parent), obj_path_(obj_path),
     type_(type), owner_(owner),
     default_command_executer_(new CommandExecuter(owner, self)),
-    is_actual_(is_local) {
+    is_actual_(is_actual) {
   InitCompareFunc();
   if (parent) {
     if (parent->IsFlattened())
@@ -360,7 +360,7 @@ ObjectData::Impl::Impl(ObjectData* self,
     if (!is_flattened && !parent_dir_path.empty()) {
       if (init_directory)
         InitDirPath(parent_dir_path / obj_path_.LeafName());
-      RefreshLocalChildren();
+      RefreshActualChildren();
     }
   }
 }
@@ -376,7 +376,7 @@ ObjectData::Impl::Impl(ObjectData* self,
     default_command_executer_(new CommandExecuter(owner, self)) {
   InitCompareFunc();
   data_file_name_ = DataIOFactory::DataFileName(type_, file_format_);
-  RefreshLocalChildren();
+  RefreshActualChildren();
 }
     
 ObjectData::Impl::~Impl() {
@@ -395,7 +395,7 @@ struct HasKeyFuncInfo {
 };
 
 bool ObjectData::Impl::HasKey(const std::string& key) const {
-  if (IsLocal(key))
+  if (IsLocalKey(key))
     return true;
   InstanciateBases();
   return ExecInObjWithKey<bool>(
@@ -470,7 +470,7 @@ void ObjectData::Impl::RemoveKey(const std::string& key) {
   Executer()->UpdateValue(CommandType::kDelete, self_, key, nil, itr->second);
 }
 
-bool ObjectData::Impl::IsLocal(const std::string& key) const {
+bool ObjectData::Impl::IsLocalKey(const std::string& key) const {
   return values_.find(key) != values_.cend();
 }
 
@@ -480,7 +480,7 @@ struct WhereFuncInfo {
   std::string key;
   DObjPath path;
   Session* owner;
-  DObjPath then(const BaseObjInfo& info) const { return info.obj->Where(key); }
+  DObjPath then(const BaseObjInfo& info) const { return info.obj->WhereIsKey(key); }
   DObjPath else_() const {
     BOOST_THROW_EXCEPTION(
         ObjectDataException(kErrNoKey)
@@ -488,8 +488,8 @@ struct WhereFuncInfo {
   }    
 };
 
-DObjPath ObjectData::Impl::Where(const std::string& key) const {
-  if (IsLocal(key))
+DObjPath ObjectData::Impl::WhereIsKey(const std::string& key) const {
+  if (IsLocalKey(key))
     return Path();
   InstanciateBases();
   return ExecInObjWithKey<DObjPath>(
@@ -606,22 +606,22 @@ void ObjectData::Impl::SetIsActual(bool state) {
     auto itr = std::find_if(parent_->impl_->children_.begin(),
                             parent_->impl_->children_.end(),
                             [&name](auto& info) { return info.Name() == name; });
-    itr->SetIsLocal(state);
-    auto& local_children = parent_->impl_->local_children_;
+    itr->SetIsActual(state);
+    auto& actual_children = parent_->impl_->actual_children_;
     if (state) {
-      if (!parent_->HasLocalChild(name)) {
-        local_children.push_back(*itr);
-        SortDObjInfoVector(local_children, compare_func_);
+      if (!parent_->HasActualChild(name)) {
+        actual_children.push_back(*itr);
+        SortDObjInfoVector(actual_children, compare_func_);
       }
       is_actual_ = true;
       parent_->impl_->SetIsActual(true);
     } else {
-      if (parent_->HasLocalChild(name)) {
-        local_children.erase(
-            std::find_if(local_children.cbegin(),
-                         local_children.cend(),
+      if (parent_->HasActualChild(name)) {
+        actual_children.erase(
+            std::find_if(actual_children.cbegin(),
+                         actual_children.cend(),
                          [&name] (auto& info) { return info.Name() == name; }),
-            local_children.cend());
+            actual_children.cend());
       }
       is_actual_ = false;
     }
@@ -635,14 +635,14 @@ bool ObjectData::Impl::HasChild(const std::string& name) const {
       [&](auto& c) { return c.Name() == name; }) != children_.cend();
 }
 
-bool ObjectData::Impl::HasLocalChild(const std::string& name) const {
+bool ObjectData::Impl::HasActualChild(const std::string& name) const {
   return std::find_if(
-      local_children_.cbegin(),
-      local_children_.cend(),
-      [&](auto& c) { return c.Name() == name; }) != local_children_.cend();
+      actual_children_.cbegin(),
+      actual_children_.cend(),
+      [&](auto& c) { return c.Name() == name; }) != actual_children_.cend();
 }
 
-bool ObjectData::Impl::IsLocalChild(const std::string& name) const {
+bool ObjectData::Impl::IsActualChild(const std::string& name) const {
   auto itr = std::find_if(
       children_.cbegin(),
       children_.cend(),
@@ -651,7 +651,7 @@ bool ObjectData::Impl::IsLocalChild(const std::string& name) const {
     BOOST_THROW_EXCEPTION(
         ObjectDataException(kErrChildNotExist)
         << ExpInfo1(name) << ExpInfo2(Path().String()));
-  return itr->IsLocal();
+  return itr->IsActual();
 }
 
 bool ObjectData::Impl::IsChildOpened(const std::string& name) const {
@@ -720,7 +720,7 @@ void ObjectData::Impl::SetChildFlat(const std::string& name, bool flag_only) {
 }
 
 void ObjectData::Impl::UnsetChildFlat(const std::string& name) {
-  if (!HasLocalChild(name))
+  if (!HasActualChild(name))
     BOOST_THROW_EXCEPTION(
         ObjectDataException(kErrChildNotExist)
         << ExpInfo1(name) << ExpInfo2(Path().String()));
@@ -746,7 +746,7 @@ DObjectSp ObjectData::Impl::OpenChild(const std::string& name, OpenMode mode) co
 
 DObjectSp ObjectData::Impl::CreateChild(
     const std::string& name, const std::string& type, bool is_flattened) {
-  if (HasLocalChild(name)) {
+  if (HasActualChild(name)) {
     auto child_path = obj_path_.ChildPath(name);
     auto child = owner_->OpenObject(child_path, OpenMode::kEditable);
     return child;
@@ -767,11 +767,11 @@ DObjectSp ObjectData::Impl::GetObjectByPath(const DObjPath& obj_path,
 }
 
 void ObjectData::Impl::AddChildInfo(const DObjInfo& child_info) {
-  if (HasLocalChild(child_info.Name()))
+  if (HasActualChild(child_info.Name()))
     BOOST_THROW_EXCEPTION(
         ObjectDataException(kErrChildDataAlreadyExists)
         << ExpInfo1(child_info.Name()) << ExpInfo2(Path().String()));
-  local_children_.emplace_back(child_info);
+  actual_children_.emplace_back(child_info);
   children_.erase(std::remove_if(children_.begin(), children_.end(),
                                  [&child_info](auto& c) {
                                    return c.Name() == child_info.Name(); }),
@@ -781,7 +781,7 @@ void ObjectData::Impl::AddChildInfo(const DObjInfo& child_info) {
 }
 
 void ObjectData::Impl::DeleteChild(const std::string& name) {
-  if (!HasLocalChild(name))
+  if (!HasActualChild(name))
     BOOST_THROW_EXCEPTION(
         ObjectDataException(kErrChildNotExist)
         << ExpInfo1(name) << ExpInfo2(Path().String()));
@@ -867,7 +867,7 @@ bool ObjectData::Impl::InitDirPathImpl(const FsPath& dir_path) {
     }
   }
   if (!ObjectFactory::Instance().IsFlattenedObject(Type())) {
-    for (auto& child_info : local_children_) {
+    for (auto& child_info : actual_children_) {
       if (IsChildFlat(child_info.Name()))
         continue;
       auto child = ChildData(child_info.Name(), false);
@@ -901,7 +901,7 @@ void ObjectData::Impl::SetDirty(bool dirty) {
   dirty_ = dirty;
   if (!dirty)
     // reset dirty flag recursively for flattened children
-    for (auto& child_info : local_children_)
+    for (auto& child_info : actual_children_)
       if (IsChildFlat(child_info.Name()))
         GetChild(child_info.Name(), OpenMode::kEditable)->SetDirty(false);
 }
@@ -909,7 +909,7 @@ void ObjectData::Impl::SetDirty(bool dirty) {
 bool ObjectData::Impl::IsDirty() const {
   if (!dirty_)
     // If not dirty, check dirty flag recursively from flattened children
-    for (auto& child_info : local_children_)
+    for (auto& child_info : actual_children_)
       if (IsChildFlat(child_info.Name()))
         if (GetChild(child_info.Name(), OpenMode::kReadOnly)->IsDirty())
           return true;
@@ -997,7 +997,7 @@ void ObjectData::Impl::AddBaseFromParent(const DObjectSp& base) {
   AddBaseToChildren(base);
   SetDirty(true);
   EmitSignal(cmd, ListenerCallPoint::kPost);
-  for (auto& child_info : local_children_) {
+  for (auto& child_info : actual_children_) {
     if (base->HasChild(child_info.Name())) {
       auto child_of_base = base->OpenChild(child_info.Name(), OpenMode::kReadOnly);
       OpenChild(child_info.Name(), OpenMode::kReadOnly)
@@ -1113,7 +1113,7 @@ void ObjectData::Impl::InstanciateBases(
                 const_cast<ObjectData::Impl*>(this)->ProcessBaseObjectUpdate(
                     cmd, ListenerCallPoint::kPost); },
               ListenerCallPoint::kPost));
-      for (auto& child_info : local_children_) {
+      for (auto& child_info : actual_children_) {
         if (!base->HasChild(child_info.Name()))
           continue;
         auto base_child_path = base->Path().ChildPath(child_info.Name());
@@ -1180,7 +1180,7 @@ void ObjectData::Impl::Save(bool recurse) {
   Save(io);
   io->CloseForWrite();
   if (recurse) {
-    for (auto& child_info : local_children_) {
+    for (auto& child_info : actual_children_) {
       if (IsChildOpened(child_info.Name()) && !IsChildFlat(child_info.Name())) {
         auto child = GetChild(
             child_info.Name(), OpenMode::kReadOnly)->GetData();
@@ -1201,7 +1201,7 @@ void ObjectData::Impl::Save(const std::unique_ptr<DataIO>& io) {
   RemoveBaseFromDict(attrs_);
   io->ToSectionUp();
   io->ToChildrenSection();
-  for (auto& child : local_children_) {
+  for (auto& child : actual_children_) {
     if (!IsChildFlat(child.Name()))
       continue;
     io->ToSection(child);
@@ -1277,10 +1277,10 @@ void ObjectData::Impl::ExecDeleteChild(const std::string& name) {
               child_info.Path(), child_info.Type(), prev_children);
   EmitSignal(cmd, ListenerCallPoint::kPre);
   Owner()->DeleteObjectImpl(child_info.Path());
-  local_children_.erase(
-      std::remove_if(local_children_.begin(), local_children_.end(),
+  actual_children_.erase(
+      std::remove_if(actual_children_.begin(), actual_children_.end(),
                      [&name](auto& c) { return c.Name() == name; }),
-      local_children_.end());
+      actual_children_.end());
   RefreshChildrenInBase();
   if (is_flat_child)
     SetDirty(true);
@@ -1407,22 +1407,22 @@ void ObjectData::Impl::Load() {
 }
 
 void ObjectData::Impl::RefreshChildren() {
-  RefreshLocalChildren();
+  RefreshActualChildren();
   RefreshChildrenInBase();
 }
 
-void ObjectData::Impl::RefreshLocalChildren() {
+void ObjectData::Impl::RefreshActualChildren() {
   if (dir_path_.empty())
     return;
   std::vector<DObjInfo> children;
-  std::copy_if(local_children_.cbegin(), local_children_.cend(),
+  std::copy_if(actual_children_.cbegin(), actual_children_.cend(),
                std::back_inserter(children),
                [this] (auto& c) { return this->IsChildFlat(c.Name()); });
-  local_children_.erase(
+  actual_children_.erase(
       std::remove_if(
-          local_children_.begin(), local_children_.end(),
+          actual_children_.begin(), actual_children_.end(),
           [this] (auto& c) { return !this->IsChildFlat(c.Name()); }),
-      local_children_.end());
+      actual_children_.end());
   auto dirs = boost::make_iterator_range(
       fs::directory_iterator(dir_path_),
       fs::directory_iterator());
@@ -1432,40 +1432,40 @@ void ObjectData::Impl::RefreshLocalChildren() {
       if (!file_info.IsValid())
         continue;
       auto child_name = file_info.DirName();
-      if (HasLocalChild(child_name))
+      if (HasActualChild(child_name))
         continue;
       children.emplace_back(
           DObjInfo(obj_path_.ChildPath(child_name), file_info.Type()));
     }
   }
   SortDObjInfoVector(children, compare_func_);
-  if (children == local_children_)
+  if (children == actual_children_)
     return;
-  std::swap(local_children_, children);
+  std::swap(actual_children_, children);
   children_.erase(
       std::remove_if(
           children_.begin(), children_.end(),
-          [] (auto& c) { return c.IsLocal(); }),
+          [] (auto& c) { return c.IsActual(); }),
       children_.end());
   children_.insert(
-      children_.begin(), local_children_.begin(), local_children_.end());
+      children_.begin(), actual_children_.begin(), actual_children_.end());
   SortDObjInfoVector(children_, compare_func_);
 }
 
 void ObjectData::Impl::RefreshChildrenInBase() const {
   std::unordered_set<std::string> names;
-  for (auto& child : local_children_)
+  for (auto& child : actual_children_)
     names.insert(child.Name());
   children_.clear();
   children_.insert(children_.begin(),
-                   local_children_.cbegin(), local_children_.cend());
+                   actual_children_.cbegin(), actual_children_.cend());
   InstanciateBases();
   for (auto& base_info : effective_base_info_list_) {
     for (auto base_child : base_info->obj->Children()) {
       if (names.find(base_child.Name()) != names.cend())
         continue;
       names.insert(base_child.Name());
-      base_child.SetIsLocal(false);
+      base_child.SetIsActual(false);
       base_child.SetPath(obj_path_.ChildPath(base_child.Name()));
       children_.emplace_back(base_child);
     }
@@ -1520,7 +1520,7 @@ void ObjectData::Impl::ProcessBaseObjectUpdate(
                        cmd.ObjPath(), "", prev_children), call_point);
     return;
   }
-  if (!IsLocal(cmd.Key()))
+  if (!IsLocalKey(cmd.Key()))
     EmitSignal(Command(cmd.Type(), Path(), cmd.Key(), cmd.NewValue(),
                        cmd.PrevValue(), DObjPath(), "", {}), call_point);
 }
@@ -1619,10 +1619,10 @@ ObjectData::ObjectData(const DObjPath& obj_path,
                        Session* owner,
                        bool is_flattened,
                        bool init_directory,
-                       bool is_local) :
+                       bool is_actual) :
     impl_(std::make_unique<Impl>(
         this, obj_path, type, parent, owner,
-        is_flattened, init_directory, is_local)) {
+        is_flattened, init_directory, is_actual)) {
 }
 
 ObjectData::ObjectData(const FsPath& dir_path,
@@ -1657,12 +1657,12 @@ void ObjectData::RemoveKey(const std::string& key) {
   impl_->RemoveKey(key);
 }
 
-bool ObjectData::IsLocal(const std::string& key) const {
-  return impl_->IsLocal(key);
+bool ObjectData::IsLocalKey(const std::string& key) const {
+  return impl_->IsLocalKey(key);
 }
 
-DObjPath ObjectData::Where(const std::string& key) const {
-  return impl_->Where(key);
+DObjPath ObjectData::WhereIsKey(const std::string& key) const {
+  return impl_->WhereIsKey(key);
 }
 
 std::vector<std::string> ObjectData::Keys(bool local_only) const {
@@ -1726,12 +1726,12 @@ bool ObjectData::HasChild(const std::string& name) const {
   return impl_->HasChild(name);
 }
 
-bool ObjectData::HasLocalChild(const std::string& name) const {
-  return impl_->HasLocalChild(name);
+bool ObjectData::HasActualChild(const std::string& name) const {
+  return impl_->HasActualChild(name);
 }
 
-bool ObjectData::IsLocalChild(const std::string& name) const {
-  return impl_->IsLocalChild(name);
+bool ObjectData::IsActualChild(const std::string& name) const {
+  return impl_->IsActualChild(name);
 }
 
 bool ObjectData::IsChildOpened(const std::string& name) const {
@@ -1919,7 +1919,7 @@ DObjectSp ObjectData::ExecCreateChild(const std::string& name,
               "", nil, nil, child_path, type, prev_children);
   impl_->EmitSignal(cmd, ListenerCallPoint::kPre);
   DObjectSp child;
-  if (HasLocalChild(name)) {
+  if (HasActualChild(name)) {
     child = impl_->Owner()->OpenObject(child_path, OpenMode::kEditable);
   } else {
     child = impl_->Owner()->CreateObjectImpl(child_path, type, is_flattened);
@@ -1948,10 +1948,10 @@ DataSp ObjectData::Create(const DObjPath& obj_path,
                           Session* owner,
                           bool is_flattened,
                           bool init_directory,
-                          bool is_local) {
+                          bool is_actual) {
   auto data = std::shared_ptr<ObjectData>(
       new ObjectData(obj_path, type, parent, owner,
-                     is_flattened, init_directory, is_local));
+                     is_flattened, init_directory, is_actual));
   if (parent && parent->IsFlattened()) {
     parent->impl_->SetChildFlat(obj_path.LeafName(), true);
     parent->SetDirty(true);

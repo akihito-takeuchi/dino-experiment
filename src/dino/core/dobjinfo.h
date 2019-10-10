@@ -14,7 +14,7 @@ namespace core {
 class DObjInfo {
  public:
   DObjInfo();
-  DObjInfo(const DObjPath& path, const std::string& type, bool is_local = true);
+  DObjInfo(const DObjPath& path, const std::string& type, bool is_actual = true);
   ~DObjInfo();
   DObjInfo(const DObjInfo&) = default;
   DObjInfo& operator=(const DObjInfo&) = default;
@@ -26,8 +26,8 @@ class DObjInfo {
   std::string Type() const;
   void SetType(const std::string& type);
   bool IsValid() const;
-  bool IsLocal() const;
-  void SetIsLocal(bool is_local);
+  bool IsActual() const;
+  void SetIsActual(bool is_actual);
   std::string ToString(bool name_only = false) const;
   static DObjInfo FromString(const std::string& info_str);
   bool operator==(const DObjInfo& rhs) const;
@@ -36,7 +36,7 @@ class DObjInfo {
   DObjPath path_;
   std::string name_;
   std::string type_;
-  bool is_local_ = false;
+  bool is_actual_ = false;
 };
 
 bool operator<(const DObjInfo& lhs, const DObjInfo& rhs);
