@@ -65,7 +65,7 @@ class DObject {
   std::vector<DObjInfo> Children() const;
   DObjInfo ChildInfo(const std::string& name) const;
   size_t ChildCount() const;
-  virtual DObjectSp GetChild(size_t index,
+  DObjectSp GetChild(size_t index,
                              OpenMode mode = OpenMode::kReadOnly) const;
   DObjectSp GetChild(const std::string& name,
                      OpenMode mode = OpenMode::kReadOnly) const;

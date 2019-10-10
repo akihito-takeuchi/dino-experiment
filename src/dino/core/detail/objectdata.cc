@@ -121,10 +121,15 @@ T ExecInObjWithKey(std::vector<BaseObjInfo*>& base_info_list,
   return func_info.else_();
 }
 
-void SortDObjInfoVector(std::vector<DObjInfo>& obj_list) {
+using DObjCompareFunc = std::function<
+  bool (const DObjInfo& lhs, const DObjInfo& rhs)>;
+
+void SortDObjInfoVector(std::vector<DObjInfo>& obj_list,
+                        const DObjCompareFunc& comp) {
   std::sort(obj_list.begin(),
             obj_list.end(),
-            [](const auto& a, const auto& b) { return a < b; });
+            [&comp](const auto& lhs, const auto& rhs) {
+              return comp(lhs, rhs); });
 }
 
 BaseObjInfo __invalid_base_info;
@@ -283,6 +288,8 @@ class ObjectData::Impl {
   Session* Owner() const { return owner_; }
   void EmitSignal(const Command& cmd, ListenerCallPoint call_point);
 
+  void InitCompareFunc();
+
  private:
   void Save(const std::unique_ptr<DataIO>& data_io);
   bool InitDirPathImpl(const FsPath& dir_path);
@@ -330,6 +337,7 @@ class ObjectData::Impl {
   bool signal_enabled_ = true;
   bool is_actual_ = false;
   DObjPath add_child_top_;
+  DObjCompareFunc compare_func_;
 };
 
 ObjectData::Impl::Impl(ObjectData* self,
@@ -344,6 +352,7 @@ ObjectData::Impl::Impl(ObjectData* self,
     type_(type), owner_(owner),
     default_command_executer_(new CommandExecuter(owner, self)),
     is_actual_(is_local) {
+  InitCompareFunc();
   if (parent) {
     if (is_local)
       parent->AddChildInfo(DObjInfo(obj_path, type, is_local));
@@ -367,6 +376,7 @@ ObjectData::Impl::Impl(ObjectData* self,
     self_(self), parent_(parent), obj_path_(obj_path),
     dir_path_(dir_path), type_(type), owner_(owner),
     default_command_executer_(new CommandExecuter(owner, self)) {
+  InitCompareFunc();
   data_file_name_ = DataIOFactory::DataFileName(type_, file_format_);
   RefreshLocalChildren();
 }
@@ -603,7 +613,7 @@ void ObjectData::Impl::SetIsActual(bool state) {
     if (state) {
       if (!parent_->HasLocalChild(name)) {
         local_children.push_back(*itr);
-        SortDObjInfoVector(local_children);
+        SortDObjInfoVector(local_children, compare_func_);
       }
       is_actual_ = true;
       parent_->impl_->SetIsActual(true);
@@ -769,7 +779,7 @@ void ObjectData::Impl::AddChildInfo(const DObjInfo& child_info) {
                                    return c.Name() == child_info.Name(); }),
                   children_.end());
   children_.emplace_back(child_info);
-  SortDObjInfoVector(children_);
+  SortDObjInfoVector(children_, compare_func_);
 }
 
 void ObjectData::Impl::DeleteChild(const std::string& name) {
@@ -1430,7 +1440,7 @@ void ObjectData::Impl::RefreshLocalChildren() {
           DObjInfo(obj_path_.ChildPath(child_name), file_info.Type()));
     }
   }
-  SortDObjInfoVector(children);
+  SortDObjInfoVector(children, compare_func_);
   if (children == local_children_)
     return;
   std::swap(local_children_, children);
@@ -1441,7 +1451,7 @@ void ObjectData::Impl::RefreshLocalChildren() {
       children_.end());
   children_.insert(
       children_.begin(), local_children_.begin(), local_children_.end());
-  SortDObjInfoVector(children_);
+  SortDObjInfoVector(children_, compare_func_);
 }
 
 void ObjectData::Impl::RefreshChildrenInBase() const {
@@ -1462,7 +1472,7 @@ void ObjectData::Impl::RefreshChildrenInBase() const {
       children_.emplace_back(base_child);
     }
   }
-  SortDObjInfoVector(children_);
+  SortDObjInfoVector(children_, compare_func_);
 }
 
 void ObjectData::Impl::ProcessBaseObjectUpdate(
@@ -1591,6 +1601,18 @@ ObjectData* ObjectData::Impl::FindTop() const {
   if (parent_)
     return parent_->impl_->FindTop();
   return self_;
+}
+
+void ObjectData::Impl::InitCompareFunc() {
+  auto sort_compare_func =
+      ObjectFactory::Instance().GetChildrenSortCompareFunc(type_);
+  auto session = owner_;
+  auto get_obj_func = [session](const DObjInfo& info) {
+    return session->GetObject(info.Path());
+  };
+  compare_func_ = [get_obj_func, sort_compare_func](auto& lhs, auto& rhs) {
+    return sort_compare_func(get_obj_func, lhs, rhs);
+  };
 }
 
 ObjectData::ObjectData(const DObjPath& obj_path,

@@ -13,9 +13,15 @@ namespace core {
 
 namespace {
 
-ObjectFactory::CreateFunc CreateDObject = [](const DataWp& data) {
+DObject* CreateDObject(const DataWp& data) {
   return new DObject(data);
 };
+
+bool CompareByName(
+    const ObjectFactory::GetObjFunc& /*func*/,
+    const DObjInfo& lhs, const DObjInfo& rhs) {
+  return lhs.Name() < rhs.Name();
+}
 
 }  // namespace
 
@@ -28,7 +34,9 @@ class ObjectFactory::Impl {
   Impl() = default;
   ~Impl() = default;
   std::map<std::string, ObjectConstructInfo> object_info_map;
+  std::map<std::string, ChildrenSortCompareFunc> sort_compare_func_map;
   CreateFunc default_create_func = CreateDObject;
+  ChildrenSortCompareFunc default_sort_compare_func = CompareByName;
   bool use_default = true;
 };
 
@@ -42,6 +50,12 @@ bool ObjectFactory::Register(const std::string& type,
                              const CreateFunc& func,
                              ObjectFlatTypeConst flat_type) {
   impl_->object_info_map[type] = {func, flat_type};
+  return true;
+}
+
+bool ObjectFactory::RegisterChildrenSortCompareFunc(const std::string& type,
+                                                    const ChildrenSortCompareFunc& comp) {
+  impl_->sort_compare_func_map[type] = comp;
   return true;
 }
 
@@ -60,6 +74,14 @@ DObject* ObjectFactory::Create(const DataWp& data) const {
         ObjectFactoryException(kErrObjectTypeNotRegistered)
         << ExpInfo1(type));
   return impl_->default_create_func(data);
+}
+
+ObjectFactory::ChildrenSortCompareFunc ObjectFactory::GetChildrenSortCompareFunc(
+    const std::string& type) const {
+  auto itr = impl_->sort_compare_func_map.find(type);
+  if (itr != impl_->sort_compare_func_map.cend())
+    return itr->second;
+  return impl_->default_sort_compare_func;
 }
 
 ObjectFactory::ObjectFlatTypeConst ObjectFactory::FlatType(

@@ -22,6 +22,9 @@ class ObjectFactory {
     kSpecifyAtCreation
   };
   using CreateFunc = std::function<DObject* (const DataWp& data)>;
+  using GetObjFunc = std::function<DObjectSp (const DObjInfo& info)>;
+  using ChildrenSortCompareFunc = std::function<
+    bool (const GetObjFunc& func, const DObjInfo& lhs, const DObjInfo& rhs)>;
 
   ObjectFactory(const ObjectFactory&) = delete;
   ObjectFactory& operator=(const ObjectFactory&) = delete;
@@ -30,8 +33,12 @@ class ObjectFactory {
       const std::string& type,
       const CreateFunc& func,
       ObjectFlatTypeConst flat_type = ObjectFlatTypeConst::kSpecifyAtCreation);
+  bool RegisterChildrenSortCompareFunc(const std::string& type,
+                                       const ChildrenSortCompareFunc& comp);
   bool SetDefaultCreateFunc(const CreateFunc& func);
   DObject* Create(const DataWp& data) const;
+  ChildrenSortCompareFunc GetChildrenSortCompareFunc(
+      const std::string& type) const;
   ObjectFlatTypeConst FlatType(const std::string& type) const;
   bool IsFlattenedObject(const std::string& type) const;
   bool UpdateFlattenedFlag(const std::string& type, bool is_flattened) const;
