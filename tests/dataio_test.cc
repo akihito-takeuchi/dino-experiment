@@ -16,7 +16,6 @@ auto& nil = dc::nil;
 
 namespace {
 
-const std::string kWspFile = "dino.wsp";
 const std::string kObjName1 = "top1";
 const std::string kObjName2 = "top2";
 
@@ -25,8 +24,6 @@ const std::string kObjName2 = "top2";
 class DataIOTest : public ::testing::Test {
  protected:
   virtual void SetUp() {
-    if (fs::exists(kWspFile))
-      fs::remove(kWspFile);
     if (fs::exists(kObjName1))
       fs::remove_all(kObjName1);
     if (fs::exists(kObjName2))
@@ -35,7 +32,7 @@ class DataIOTest : public ::testing::Test {
 };
 
 TEST_F(DataIOTest, WithoutSave) {
-  auto session = dc::Session::Create(kWspFile);
+  auto session = dc::Session::Create();
   ASSERT_TRUE(session);
   dc::DObjectSp obj(session->CreateTopLevelObject(kObjName1, kObjName1));
   ASSERT_FALSE(obj->HasKey("test"));
@@ -56,11 +53,10 @@ TEST_F(DataIOTest, WithoutSave) {
   obj->Put("test4", false);
   ASSERT_TRUE(obj->Get("test4") == false);
   ASSERT_FALSE(obj->Get("test4") == true);
-  session->Save();
 }
 
 TEST_F(DataIOTest, SaveReadTest) {
-  auto session = dc::Session::Create(kWspFile);
+  auto session = dc::Session::Create();
   ASSERT_TRUE(session);
   dc::DObjPath path2(kObjName2);
   auto obj = session->CreateTopLevelObject(kObjName2, kObjName2);
@@ -82,5 +78,4 @@ TEST_F(DataIOTest, SaveReadTest) {
 
   obj = session->OpenTopLevelObject(kObjName2, kObjName2);
   ASSERT_TRUE(obj->Get("test") == 30);
-  session->Save();
 }

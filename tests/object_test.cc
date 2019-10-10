@@ -16,7 +16,6 @@ auto& nil = dc::nil;
 
 namespace {
 
-const std::string kWspFile = "dino.wsp";
 const std::string kTopName1 = "top1";
 const std::string kTopName2 = "top2";
 const std::string kTopName3 = "top3";
@@ -34,8 +33,6 @@ const std::string kChildName4 = "child4";
 class ObjectTest : public ::testing::Test {
  protected:
   virtual void SetUp() {
-    if (fs::exists(kWspFile))
-      fs::remove(kWspFile);
     for (auto dir_name
              : {kTopName1, kTopName2, kTopName3, kTopName4,
                kTopName5, kTopName6, kTopName7,
@@ -46,7 +43,7 @@ class ObjectTest : public ::testing::Test {
 };
 
 TEST_F(ObjectTest, ExpectFail) {
-  auto session = dc::Session::Create(kWspFile);
+  auto session = dc::Session::Create();
   dc::DObjPath top_path2(kTopName2);
   std::string child_path_str1 = kTopName2 + "/" + kChildName1;
   dc::DObjPath child_path1(child_path_str1);
@@ -63,7 +60,7 @@ TEST_F(ObjectTest, ExpectFail) {
 }
 
 TEST_F(ObjectTest, WriteRead) {
-  auto session = dc::Session::Create(kWspFile);
+  auto session = dc::Session::Create();
   dc::DObjPath top_path1(kTopName1);
   {
     auto top = session->CreateTopLevelObject(kTopName1, kTopName1);
@@ -94,12 +91,11 @@ TEST_F(ObjectTest, WriteRead) {
     ASSERT_TRUE(top);
     ASSERT_TRUE(top->Get("TEST") == 100);
   }
-  session->Save();
 }
 
 TEST_F(ObjectTest, Hierarchy) {
   dc::DObjPath top_obj_path(kTopName2);
-  auto session = dc::Session::Create(kWspFile);
+  auto session = dc::Session::Create();
   auto top = session->CreateTopLevelObject(kTopName2, kTopName2);
   ASSERT_TRUE(top);
   ASSERT_THROW(session->GetObject(dc::DObjPath(kTopName2 + "/" + kChildName1)),
@@ -165,7 +161,7 @@ TEST_F(ObjectTest, Flat) {
   dc::DObjPath path3(path3_str);
   dc::DObjPath path4(path4_str);
   {
-    auto session = dc::Session::Create(kWspFile);
+    auto session = dc::Session::Create();
     auto top = session->CreateTopLevelObject(kTopName3, kTopName3);
     session->InitTopLevelObjectPath(kTopName3, kTopName3);
     ASSERT_FALSE(top->IsDirty());
@@ -251,13 +247,11 @@ TEST_F(ObjectTest, Flat) {
     ASSERT_FALSE(fs::exists(path3_str));
     ASSERT_TRUE(fs::exists(path4_str));
 
-    session->Save();
   }
   {
-    ASSERT_THROW(dc::Session::Create(kWspFile),
-                 dc::DException);
-    auto session = dc::Session::Open(kWspFile);
+    auto session = dc::Session::Create();
     ASSERT_TRUE(session);
+    ASSERT_TRUE(session->OpenTopLevelObject(kTopName3, kTopName3));
     auto names = session->TopObjectNames();
     ASSERT_EQ(names.size(), 1u);
     ASSERT_THROW(session->CreateTopLevelObject(kTopName3, kTopName3),
@@ -483,7 +477,7 @@ TEST_F(ObjectTest, ExtraFileInObjectDir) {
 
 TEST_F(ObjectTest, StoreArray) {
   {
-    auto session = dc::Session::Create(kWspFile);
+    auto session = dc::Session::Create();
     auto top = session->CreateTopLevelObject(kTopName7, "top");
     session->InitTopLevelObjectPath(kTopName7, kTopName7);
     dc::DValueArray values;
@@ -495,11 +489,10 @@ TEST_F(ObjectTest, StoreArray) {
     auto child = top->CreateChild(kChildName1, "child");
     child->Put("test_key", values);
     child->Save();
-    session->Save();
   }
   {
-    auto session = dc::Session::Open(kWspFile);
-    session->OpenObject(kTopName7);
+    auto session = dc::Session::Create();
+    session->OpenTopLevelObject(kTopName7, kTopName7);
     auto child = session->OpenObject(kTopName7 + "/" + kChildName1);
     auto values = boost::get<dc::DValueArray>(child->Get("test_key"));
     ASSERT_EQ(values[0], 1);

@@ -46,19 +46,9 @@ class Session : public std::enable_shared_from_this<Session> {
   bool IsOpened(const DObjPath& obj_path) const;
   void DeleteObject(const DObjPath& obj_path);
   void RemoveTopLevelObject(const std::string& name, bool delete_files = false);
-  FsPath WorkspaceFilePath() const;
-  void ImportWorkspaceFile(const std::string& wsp_file_path);
-  void ImportWorkspaceFile(const FsPath& wsp_file_path);
   void PurgeObject(const DObjPath& obj_path);
-  void Save();
-  bool HasError();
-  std::string ErrorMessage() const;
-  void ClearErrorMessage();
 
   static SessionPtr Create();
-  static SessionPtr Create(const std::string& wsp_file_path);
-  static SessionPtr Create(const FsPath& wsp_file_path);
-  static SessionPtr Open(const FsPath& wsp_file_path);
 
  private:
   Session();

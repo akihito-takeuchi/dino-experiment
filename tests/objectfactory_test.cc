@@ -15,7 +15,6 @@ namespace fs = boost::filesystem;
 
 namespace {
 
-const std::string kWspFile = "dino.wsp";
 const std::string kTopName1 = "top1";
 const std::string kTopName2 = "top2";
 const std::string kTopName3 = "top3";
@@ -25,8 +24,6 @@ const std::string kTopName3 = "top3";
 class ObjectFactoryTest : public ::testing::Test {
  protected:
   virtual void SetUp() {
-    if (fs::exists(kWspFile))
-      fs::remove(kWspFile);
     for (auto dir_name : {kTopName1, kTopName2, kTopName3})
       if (fs::exists(dir_name))
         fs::remove_all(dir_name);
@@ -51,7 +48,7 @@ class Top3 : public dc::DObject {
 TEST_F(ObjectFactoryTest, DefaultCreateFunc) {
   auto& factory = dc::ObjectFactory::Instance();
   factory.Reset();
-  auto session = dc::Session::Create(kWspFile);
+  auto session = dc::Session::Create();
   auto top1 = session->CreateObject(dc::DObjPath(kTopName1), kTopName1);
   ASSERT_FALSE(std::dynamic_pointer_cast<Top1>(top1));
   factory.DisableDefault();
@@ -72,7 +69,7 @@ TEST_F(ObjectFactoryTest, DefaultCreateFunc) {
 TEST_F(ObjectFactoryTest, OpenTest) {
   auto& factory = dc::ObjectFactory::Instance();
   factory.Reset();
-  auto session = dc::Session::Create(kWspFile);
+  auto session = dc::Session::Create();
   {
     auto top1 = session->CreateObject(dc::DObjPath(kTopName1), kTopName1);
     session->InitTopLevelObjectPath(kTopName1, kTopName1);

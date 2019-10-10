@@ -14,9 +14,6 @@ auto& nil = dc::nil;
 
 namespace {
 
-const std::string kWspFile = "dino.wsp";
-const std::string kWspFile2 = "dino2.wsp";
-const std::string kWspFile3 = "dino3.wsp";
 const std::string kTopName1 = "top1";
 const std::string kTopName2 = "top2";
 const std::string kTopName3 = "top3";
@@ -52,12 +49,6 @@ using StringVector = std::vector<std::string>;
 class InheritTest : public ::testing::Test {
  protected:
   virtual void SetUp() {
-    if (fs::exists(kWspFile))
-      fs::remove(kWspFile);
-    if (fs::exists(kWspFile2))
-      fs::remove(kWspFile2);
-    if (fs::exists(kWspFile3))
-      fs::remove(kWspFile3);
     for (auto dir_name
              : {kTopName1, kTopName2, kTopName3, kTopName4})
       if (fs::exists(dir_name))
@@ -119,7 +110,7 @@ TEST_F(InheritTest, LoadSaveInerited) {
   dc::DObjPath path2(boost::join(
       StringVector{kTopName2, kChildName2}, "/"));
   {
-    auto session = dc::Session::Create(kWspFile);
+    auto session = dc::Session::Create();
     auto top = session->CreateTopLevelObject(kTopName2, "test");
     session->InitTopLevelObjectPath(kTopName2, kTopName2);
     auto child1 = top->CreateChild(kChildName1, "test");
@@ -142,11 +133,10 @@ TEST_F(InheritTest, LoadSaveInerited) {
     ASSERT_EQ(child2->Get("test2"), 300);
     child1->Save();
     child2->Save();
-    session->Save();
   }
   {
-    auto session = dc::Session::Open(kWspFile);
-    auto top = session->OpenObject(kTopName2);
+    auto session = dc::Session::Create();
+    auto top = session->OpenTopLevelObject(kTopName2, kTopName2);
     auto child1 = session->OpenObject(path1);
     auto child2 = session->OpenObject(path2);
     ASSERT_EQ(child1->Get("test1"), 100);
@@ -162,7 +152,7 @@ TEST_F(InheritTest, PurgeBase) {
   dc::DObjPath path2(boost::join(
       StringVector{kTopName3, kChildName2}, "/"));
   {
-    auto session = dc::Session::Create(kWspFile);
+    auto session = dc::Session::Create();
     auto top = session->CreateTopLevelObject(kTopName3, "test");
     session->InitTopLevelObjectPath(kTopName3, kTopName3);
     auto child1 = top->CreateChild(kChildName1, "test");
@@ -212,7 +202,7 @@ TEST_F(InheritTest, InheritedChildren) {
   dc::DObjPath path2_3(boost::join(
       StringVector{kTopName4, kParentName2, kChildName3}, "/"));
 
-  auto session = dc::Session::Create(kWspFile);
+  auto session = dc::Session::Create();
   auto top = session->CreateTopLevelObject(kTopName4, "test");
   auto parent1 = top->CreateChild(kParentName1, "parent");
   auto parent2 = top->CreateChild(kParentName2, "parent");
@@ -299,8 +289,6 @@ TEST_F(InheritTest, InheritedChildren) {
 class InheritTestWithCommandStack : public ::testing::Test {
  protected:
   virtual void SetUp() {
-    if (fs::exists(kWspFile))
-      fs::remove(kWspFile);
     for (auto dir_name
              : {kTopName1, kTopName2, kTopName3, kTopName4})
       if (fs::exists(dir_name))
@@ -372,7 +360,7 @@ TEST_F(InheritTestWithCommandStack, InheritedChildren) {
   dc::DObjPath path2_3(boost::join(
       StringVector{kTopName4, kParentName2, kChildName3}, "/"));
 
-  auto session = dc::Session::Create(kWspFile);
+  auto session = dc::Session::Create();
   auto top = session->CreateTopLevelObject(kTopName4, "test");
   top->EnableCommandStack();
   auto parent1 = top->CreateChild(kParentName1, "parent");
@@ -464,7 +452,7 @@ TEST_F(InheritTest, DeepInheritance) {
 
   // Create base tree
   {
-    auto session = dc::Session::Create(kWspFile2);
+    auto session = dc::Session::Create();
     auto top = session->CreateTopLevelObject(kTopName1, kTopName1);
     session->InitTopLevelObjectPath(kTopName1, kTopName1);
     top->Put("key1", std::string("value1"));
@@ -481,12 +469,11 @@ TEST_F(InheritTest, DeepInheritance) {
     c1->Save();
     c2->Save();
     c3->Save();
-    session->Save();
   }
   // Test base tree
   {
-    auto session = dc::Session::Open(kWspFile2);
-    auto top = session->OpenObject(kTopName1);
+    auto session = dc::Session::Create();
+    auto top = session->OpenTopLevelObject(kTopName1, kTopName1);
     ASSERT_EQ(top->Get("key1"), std::string("value1"));
     ASSERT_EQ(top->Get("key2"), 2);
     ASSERT_EQ(top->Get("key3"), nil);
@@ -502,10 +489,10 @@ TEST_F(InheritTest, DeepInheritance) {
   }
   // create another tree which inherits base
   {
-    auto session = dc::Session::Open(kWspFile2);
-    auto top = session->CreateTopLevelObject(kTopName2,kTopName2);
+    auto session = dc::Session::Create();
+    auto top = session->CreateTopLevelObject(kTopName2, kTopName2);
     session->InitTopLevelObjectPath(kTopName2, kTopName2);
-    top->AddBase(session->OpenObject(kTopName1));
+    top->AddBase(session->OpenTopLevelObject(kTopName1, kTopName1));
     ASSERT_EQ(top->ChildCount(), 2u);
     auto children = top->Children();
     ASSERT_EQ(children[0].Name(), kChildName1);
@@ -525,12 +512,13 @@ TEST_F(InheritTest, DeepInheritance) {
     ASSERT_EQ(c3->Get("key2"), 10.0);
     ASSERT_FALSE(c3->IsDirty());
     top->Save(true);
-    session->Save();
   }
   // Check inherited, and put data&save
   {
-    auto session = dc::Session::Open(kWspFile2);
-    auto top = session->OpenObject(kTopName2);
+    auto session = dc::Session::Create();
+    // Need to open base object first
+    session->OpenTopLevelObject(kTopName1, kTopName1);
+    auto top = session->OpenTopLevelObject(kTopName2, kTopName2);
     ASSERT_EQ(top->EffectiveBases().size(), 1u);
     auto children = top->Children();
     ASSERT_EQ(top->ChildCount(), 2u);
@@ -569,8 +557,10 @@ TEST_F(InheritTest, DeepInheritance) {
   }
   // Check data load of data which already has base and local data
   {
-    auto session = dc::Session::Open(kWspFile2);
-    auto top = session->OpenObject(kTopName2);
+    auto session = dc::Session::Create();
+    // Need to open base object first
+    session->OpenTopLevelObject(kTopName1, kTopName1);
+    auto top = session->OpenTopLevelObject(kTopName2, kTopName2);
     auto c1 = top->OpenChild(kChildName1);
     ASSERT_EQ(top->ChildCount(), 2u);
     auto children = top->Children();
@@ -602,8 +592,10 @@ TEST_F(InheritTest, DeepInheritance) {
   }
   // Remove base
   {
-    auto session = dc::Session::Open(kWspFile2);
-    auto top = session->OpenObject(kTopName2);
+    auto session = dc::Session::Create();
+    // Need to open base object first
+    session->OpenTopLevelObject(kTopName1, kTopName1);
+    auto top = session->OpenTopLevelObject(kTopName2, kTopName2);
     auto base = top->Bases()[0];
     auto c1 = top->OpenChild(kChildName1);
     ASSERT_EQ(top->Bases().size(), 1u);
@@ -620,8 +612,8 @@ TEST_F(InheritTest, DeepInheritance) {
   }
   // Check data load after base removal
   {
-    auto session = dc::Session::Open(kWspFile2);
-    auto top = session->OpenObject(kTopName2);
+    auto session = dc::Session::Create();
+    auto top = session->OpenTopLevelObject(kTopName2, kTopName2);
     auto c1 = top->OpenChild(kChildName1);
     ASSERT_EQ(top->ChildCount(), 1u);
     ASSERT_TRUE(c1->IsActual());
@@ -636,9 +628,10 @@ TEST_F(InheritTest, DeepInheritance) {
   }
   // Need test to add base after creating some nodes
   {
-    auto session = dc::Session::Open(kWspFile2);
-    auto top1 = session->OpenObject(kTopName1);
-    auto top2 = session->OpenObject(kTopName2, dc::OpenMode::kEditable);
+    auto session = dc::Session::Create();
+    auto top1 = session->OpenTopLevelObject(kTopName1, kTopName1);
+    auto top2 = session->OpenTopLevelObject(
+        kTopName2, kTopName2, dc::OpenMode::kEditable);
     ASSERT_EQ(top2->ChildCount(), 1u);
     top2->AddBase(top1);
     ASSERT_EQ(top2->ChildCount(), 2u);
@@ -651,20 +644,19 @@ TEST_F(InheritTest, DeepInheritance) {
   }
   // create another tree (top3) with actual c1 node, then inherit
   {
-    auto session = dc::Session::Open(kWspFile2);
+    auto session = dc::Session::Create();
     auto top = session->CreateTopLevelObject(kTopName3, kTopName3);
     session->InitTopLevelObjectPath(kTopName3, kTopName3);
     auto c1 = top->CreateChild(kChildName1, kChildName1);
     ASSERT_EQ(top->ChildCount(), 1u);
     ASSERT_TRUE(c1->IsActual());
-    top->AddBase(session->OpenObject(kTopName1));
+    top->AddBase(session->OpenTopLevelObject(kTopName1, kTopName1));
     ASSERT_EQ(top->ChildCount(), 2u);
     ASSERT_EQ(c1->ChildCount(), 1u);
     ASSERT_EQ(c1->Get("key1"), std::string("child1"));
     ASSERT_EQ(c1->Bases().size(), 0u);
     ASSERT_EQ(c1->EffectiveBases().size(), 1u);
     top->Save(true);
-    session->Save();
   }
   // Reopen top3, test with child4 and child5
   // top1             : { "key1" : "value1", "key2" : 2, "key3" : nil }
@@ -674,8 +666,10 @@ TEST_F(InheritTest, DeepInheritance) {
   //   |    +- child5 : {}
   //   +- child2      : { "key3" : true }
   {
-    auto session = dc::Session::Open(kWspFile2);
-    auto top = session->OpenObject(kTopName3);
+    auto session = dc::Session::Create();
+    // Need to open base object first
+    session->OpenTopLevelObject(kTopName1, kTopName1);
+    auto top = session->OpenTopLevelObject(kTopName3, kTopName3);
     auto c1 = top->OpenChild(kChildName1);
     ASSERT_EQ(top->ChildCount(), 2u);
     ASSERT_EQ(c1->ChildCount(), 1u);
@@ -718,7 +712,7 @@ TEST_F(InheritTest, DeepInheritance2) {
 
   // Create base tree
   {
-    auto session = dc::Session::Create(kWspFile3);
+    auto session = dc::Session::Create();
     auto top = session->CreateTopLevelObject(kTopName1, kTopName1);
     session->InitTopLevelObjectPath(kTopName1, kTopName1);
     top->Put("key1", std::string("value1"));
@@ -736,14 +730,13 @@ TEST_F(InheritTest, DeepInheritance2) {
     c1->Save();
     c2->Save();
     c3->Save();
-    session->Save();
   }
   // Inherit and test
   {
-    auto session = dc::Session::Open(kWspFile3);
+    auto session = dc::Session::Create();
     auto top = session->CreateTopLevelObject(kTopName2, kTopName2);
     session->InitTopLevelObjectPath(kTopName2, kTopName2);
-    auto base_top = session->OpenObject(kTopName1);
+    auto base_top = session->OpenTopLevelObject(kTopName1, kTopName1);
     top->AddBase(base_top);
     ASSERT_EQ(top->ChildCount(), 2u);
     auto c1 = top->OpenChild(kChildName1);

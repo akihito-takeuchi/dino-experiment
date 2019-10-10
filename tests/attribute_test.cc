@@ -13,7 +13,6 @@ namespace fs = boost::filesystem;
 
 namespace {
 
-const std::string kWspFile = "dino.wsp";
 const std::string kTopName1 = "top1";
 const std::string kTopName2 = "top2";
 const std::string kChildName1 = "child1";
@@ -23,8 +22,6 @@ const std::string kChildName1 = "child1";
 class AttributeTest : public ::testing::Test {
  protected:
   virtual void SetUp() {
-    if (fs::exists(kWspFile))
-      fs::remove(kWspFile);
     for (auto dir_name : {kTopName1, kTopName2})
       if (fs::exists(dir_name))
         fs::remove_all(dir_name);
@@ -33,7 +30,7 @@ class AttributeTest : public ::testing::Test {
 
 TEST_F(AttributeTest, TestLocal) {
   {
-    auto session = dc::Session::Create(kWspFile);
+    auto session = dc::Session::Create();
     auto top = session->CreateTopLevelObject(kTopName1, kTopName1);
     session->InitTopLevelObjectPath(kTopName1, kTopName1);
     top->SetTemporaryAttr("temp", "temp");
@@ -56,11 +53,10 @@ TEST_F(AttributeTest, TestLocal) {
     ASSERT_FALSE(top->IsTemporaryAttr("temp2"));
     ASSERT_TRUE(top->HasPersistentAttr("temp2"));
     top->Save();
-    session->Save();
   }
   {
-    auto session = dc::Session::Open(kWspFile);
-    auto top = session->OpenObject(kTopName1);
+    auto session = dc::Session::Create();
+    auto top = session->OpenTopLevelObject(kTopName1, kTopName1);
     ASSERT_FALSE(top->HasAttr("temp"));
     ASSERT_TRUE(top->HasAttr("persistent"));
     ASSERT_TRUE(top->HasAttr("temp2"));
@@ -121,19 +117,18 @@ TEST_F(AttributeTest, TestLocal) {
 
 TEST_F(AttributeTest, TestInherited) {
   {
-    auto session = dc::Session::Create(kWspFile);
+    auto session = dc::Session::Create();
     auto top = session->CreateTopLevelObject(kTopName1, kTopName1);
     session->InitTopLevelObjectPath(kTopName1, kTopName1);
     top->SetAttr("test1", "test1");
     top->Save();
     auto c =top->CreateChild(kChildName1, kChildName1);
     c->SetAttr("test2", "test2");
-    session->Save();
   }
   {
-    auto session = dc::Session::Open(kWspFile);
+    auto session = dc::Session::Create();
     auto top = session->CreateTopLevelObject(kTopName2, kTopName2);
-    top->AddBase(session->OpenObject(kTopName1));
+    top->AddBase(session->OpenTopLevelObject(kTopName1, kTopName1));
     ASSERT_TRUE(top->IsActual());
     ASSERT_TRUE(top->IsDirty());
     auto c = top->OpenChild(kChildName1, dc::OpenMode::kEditable);
