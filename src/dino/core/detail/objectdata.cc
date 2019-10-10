@@ -18,6 +18,17 @@
 #include "dino/core/detail/dataiofactory.h"
 #include "dino/core/detail/objectdataexception.h"
 
+#define THROW1(code, info)                        \
+  BOOST_THROW_EXCEPTION(ObjectDataException(code) \
+                        << ExpInfo1(info));
+
+#define THROW2(code, info1, info2) \
+  BOOST_THROW_EXCEPTION(ObjectDataException(code) \
+                        << ExpInfo1(info1) \
+                        << ExpInfo2(info2));
+  
+
+
 namespace dino {
 
 namespace core {
@@ -489,10 +500,7 @@ struct GetFuncInfo {
   DObjPath path;
   Session* owner;
   DValue then(const BaseObjInfo& info) const { return info.Obj()->Get(key); }
-  DValue else_() const {
-    BOOST_THROW_EXCEPTION(
-        ObjectDataException(kErrNoKey)
-        << ExpInfo1(path.String()) << ExpInfo2(key)); }
+  DValue else_() const { THROW2(kErrNoKey, path.String(), key); }
 };
 
 DValue ObjectData::Impl::Get(const std::string& key) const {
@@ -522,9 +530,7 @@ void ObjectData::Impl::Put(const std::string& key, const DValue& value) {
 void ObjectData::Impl::RemoveKey(const std::string& key) {
   auto itr = values_.find(key);
   if (itr == values_.cend())
-    BOOST_THROW_EXCEPTION(
-        ObjectDataException(kErrNoKey)
-        << ExpInfo1(Path().String()) << ExpInfo2(key));
+    THROW2(kErrNoKey, Path().String(), key);
   Executer()->UpdateValue(CommandType::kDelete, self_, key, nil, itr->second);
 }
 
@@ -539,11 +545,7 @@ struct WhereFuncInfo {
   DObjPath path;
   Session* owner;
   DObjPath then(const BaseObjInfo& info) const { return info.Obj()->WhereIsKey(key); }
-  DObjPath else_() const {
-    BOOST_THROW_EXCEPTION(
-        ObjectDataException(kErrNoKey)
-        << ExpInfo1(path.String()) << ExpInfo2(key));
-  }    
+  DObjPath else_() const { THROW2(kErrNoKey, path.String(), key); }
 };
 
 DObjPath ObjectData::Impl::WhereIsKey(const std::string& key) const {
@@ -583,9 +585,7 @@ std::string ObjectData::Impl::Attr(const std::string& key) const {
     if (itr != attrs.cend())
       return boost::get<std::string>(itr->second);
   }
-  BOOST_THROW_EXCEPTION(
-      ObjectDataException(kErrAttrDoesNotExist)
-      << ExpInfo1(Path().String()) << ExpInfo2(key));
+  THROW2(kErrAttrDoesNotExist, Path().String(), key);
 }
 
 std::map<std::string, std::string> ObjectData::Impl::Attrs() const {
@@ -692,9 +692,7 @@ bool ObjectData::Impl::HasActualChild(const std::string& name) const {
 bool ObjectData::Impl::IsActualChild(const std::string& name) const {
   auto res = FindDObjInfo(children_).ByName(name);
   if (!res.Found())
-    BOOST_THROW_EXCEPTION(
-        ObjectDataException(kErrChildNotExist)
-        << ExpInfo1(name) << ExpInfo2(Path().String()));
+    THROW2(kErrChildNotExist, name, Path().String());
   return res.Obj().IsActual();
 }
 
@@ -757,9 +755,7 @@ void ObjectData::Impl::SetChildFlat(const std::string& name, bool flag_only) {
 
 void ObjectData::Impl::UnsetChildFlat(const std::string& name) {
   if (!HasActualChild(name))
-    BOOST_THROW_EXCEPTION(
-        ObjectDataException(kErrChildNotExist)
-        << ExpInfo1(name) << ExpInfo2(Path().String()));
+    THROW2(kErrChildNotExist, name, Path().String());
   if (!IsChildFlat(name))
     return;
   SetDirty(true);
@@ -804,9 +800,7 @@ DObjectSp ObjectData::Impl::GetObjectByPath(const DObjPath& obj_path,
 
 void ObjectData::Impl::AddChildInfo(const DObjInfo& child_info) {
   if (HasActualChild(child_info.Name()))
-    BOOST_THROW_EXCEPTION(
-        ObjectDataException(kErrChildDataAlreadyExists)
-        << ExpInfo1(child_info.Name()) << ExpInfo2(Path().String()));
+    THROW2(kErrChildDataAlreadyExists, child_info.Name(), Path().String());
   actual_children_.emplace_back(child_info);
   children_.erase(std::remove_if(children_.begin(), children_.end(),
                                  [&child_info](auto& c) {
@@ -818,9 +812,7 @@ void ObjectData::Impl::AddChildInfo(const DObjInfo& child_info) {
 
 void ObjectData::Impl::DeleteChild(const std::string& name) {
   if (!HasActualChild(name))
-    BOOST_THROW_EXCEPTION(
-        ObjectDataException(kErrChildNotExist)
-        << ExpInfo1(name) << ExpInfo2(Path().String()));
+    THROW2(kErrChildNotExist, name, Path().String());
   auto child_info = ChildInfo(name);
   Executer()->UpdateChildList(
       CommandType::kDelete, self_, name, child_info.Type(), IsChildFlat(name));
@@ -830,9 +822,7 @@ void ObjectData::Impl::AcquireWriteLock() {
   if (!dir_path_.empty()) {
     auto data_file_path = DataFilePath();
     if (!CurrentUser::Instance().IsWritable(data_file_path))
-      BOOST_THROW_EXCEPTION(
-          ObjectDataException(kErrNoWritePermission)
-          << ExpInfo1(data_file_path.string()));
+      THROW1(kErrNoWritePermission, data_file_path.string());
     CreateLockFile();
   }
   editable_ref_count_ ++;
@@ -858,34 +848,26 @@ void ObjectData::Impl::CreateLockFile() {
   auto lock_file_path = LockFilePath();
   if (!fs::exists(lock_file_path))
     if (!std::fstream(lock_file_path.c_str(), std::ios_base::out))
-      BOOST_THROW_EXCEPTION(
-          ObjectDataException(kErrNoWritePermission)
-          << ExpInfo1(lock_file_path.string()));
+      THROW1(kErrNoWritePermission, lock_file_path.string());
 
   if (!lock_file_) 
     lock_file_ = std::make_unique<ipc::file_lock>(lock_file_path.c_str());
   
   if (!lock_file_->try_lock())
-    BOOST_THROW_EXCEPTION(
-        ObjectDataException(kErrFailedToGetFileLock)
-        << ExpInfo1(lock_file_path));
+    THROW1(kErrFailedToGetFileLock, lock_file_path);
 }
 
 void ObjectData::Impl::InitDirPath(const FsPath& dir_path) {
   auto result = InitDirPathImpl(dir_path);
   if (!result) {
     CleanUpObjectDirectory(dir_path);
-    BOOST_THROW_EXCEPTION(
-        ObjectDataException(kErrFailedToCreateObjectDirectory)
-        << ExpInfo1(dir_path.string()));
+    THROW1(kErrFailedToCreateObjectDirectory, dir_path.string());
   }
 }
 
 bool ObjectData::Impl::InitDirPathImpl(const FsPath& dir_path) {
   if (parent_ && parent_->impl_->dir_path_.empty())
-    BOOST_THROW_EXCEPTION(
-        ObjectDataException(kErrParentDirectoryNotInitialized)
-        << ExpInfo1(Path().String()));
+    THROW1(kErrParentDirectoryNotInitialized, Path().String());
   data_file_name_ = DataIOFactory::DataFileName(type_, file_format_);
   auto info = DataIOFactory::FindDataFileInfo(dir_path);
   if (info.IsValid()) {
@@ -968,9 +950,7 @@ bool ObjectData::Impl::IsEditable() const {
 
 void ObjectData::Impl::AddBase(const DObjectSp& base) {
   if (base->IsExpired())
-    BOOST_THROW_EXCEPTION(
-        ObjectDataException(kErrExpiredObjectToBase)
-        << ExpInfo1(base->Path().String()) << ExpInfo2(Path().String()));
+    THROW2(kErrExpiredObjectToBase, base->Path().String(), Path().String());
 
   if (FindBaseObj(base_info_list_).ByPath(base->Path()).Found())
     return;
@@ -989,17 +969,13 @@ std::vector<DObjectSp> ObjectData::Impl::Bases() const {
 void ObjectData::Impl::RemoveBase(const DObjectSp& base) {
   InstanciateBases();
   if (!FindBaseObj(base_info_list_).ByPath(base->Path()).Found())
-    BOOST_THROW_EXCEPTION(
-        ObjectDataException(kErrNotBaseObject)
-        << ExpInfo1(base->Path().String()) << ExpInfo2(Path().String()));
+    THROW2(kErrNotBaseObject, base->Path().String(), Path().String());
   Executer()->UpdateBaseObjectList(CommandType::kDelete, self_, base);
 }
 
 void ObjectData::Impl::AddBaseFromParent(const DObjectSp& base) {
   if (base->IsExpired())
-    BOOST_THROW_EXCEPTION(
-        ObjectDataException(kErrExpiredObjectToBase)
-        << ExpInfo1(base->Path().String()) << ExpInfo2(Path().String()));
+    THROW2(kErrExpiredObjectToBase, base->Path().String(), Path().String());
 
   if (FindBaseObj(base_info_from_parent_list_).ByPath(base->Path()).Found())
     return;
@@ -1072,9 +1048,7 @@ void ObjectData::Impl::RemoveBaseFromParent(const DObjectSp& base) {
   auto path = base->Path();
   auto res = FindBaseObj(base_info_from_parent_list_).ByPath(path);
   if (!res.Found())
-    BOOST_THROW_EXCEPTION(
-        ObjectDataException(kErrNotBaseObject)
-        << ExpInfo1(base->Path().String()) << ExpInfo2(Path().String()));
+    THROW2(kErrNotBaseObject, base->Path().String(), Path().String());
 
   auto prev_children = Children();
   Command cmd(CommandType::kRemoveBaseObject, Path(),
@@ -1153,9 +1127,7 @@ void ObjectData::Impl::EnableSignal() {
 
 void ObjectData::Impl::Save(bool recurse) {
   if (!is_actual_ && EffectiveBases().size() > 0)
-    BOOST_THROW_EXCEPTION(
-        ObjectDataException(kErrObjectIsNotActual)
-        << ExpInfo1(obj_path_.String()));
+    THROW1(kErrObjectIsNotActual, obj_path_.String());
   if (dir_path_.empty() && parent_ && !IsFlattened()) {
     auto cur_obj = FindTop();
     auto cur_dir = cur_obj->DirPath();
@@ -1219,13 +1191,9 @@ std::string ObjectData::Impl::DataFileName() const {
 
 FsPath ObjectData::Impl::DataFilePath() const {
   if (parent_ && IsFlattened())
-    BOOST_THROW_EXCEPTION(
-        ObjectDataException(kErrObjectIsFlattened)
-        << ExpInfo1(Path().String()));
+    THROW1(kErrObjectIsFlattened, Path().String());
   if (dir_path_.empty())
-    BOOST_THROW_EXCEPTION(
-        ObjectDataException(kErrObjectDirectoryNotInitialized)
-        << ExpInfo1(Path().String()));
+    THROW1(kErrObjectDirectoryNotInitialized, Path().String());
   return dir_path_ / DataFileName();
 }
 
@@ -1516,9 +1484,7 @@ CommandStackSp ObjectData::Impl::EnableCommandStack(bool enable) {
   if (enable) {
     auto stack = GetCommandStack();
     if (stack)
-      BOOST_THROW_EXCEPTION(
-          ObjectDataException(kErrCommandStackAlreadyEnabled)
-          << ExpInfo1(stack->RootObjPath().String()));
+      THROW1(kErrCommandStackAlreadyEnabled, stack->RootObjPath().String());
     command_stack_ = std::shared_ptr<CommandStack>(
         new CommandStack(owner_, self_));
   } else {
@@ -1969,9 +1935,7 @@ DataSp ObjectData::Open(const DObjPath& obj_path,
                         Session* owner) {
   auto file_info = DataIOFactory::FindDataFileInfo(dir_path);
   if (!file_info.IsValid())
-    BOOST_THROW_EXCEPTION(
-        ObjectDataException(kErrNotObjectDirectory)
-        << ExpInfo1(dir_path.string()));
+    THROW1(kErrNotObjectDirectory, dir_path.string());
   auto data = std::shared_ptr<ObjectData>(new ObjectData(
       dir_path, obj_path, file_info.Type(), parent, owner));
   return data;
