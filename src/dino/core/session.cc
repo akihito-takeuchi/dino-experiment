@@ -622,6 +622,10 @@ void Session::Impl::RegisterObjectData(const detail::DataSp& data) {
         SessionException(kErrObjectDataAlreadyExists)
         << ExpInfo1(obj_path.String()));
   obj_data_map_[obj_path] = data;
+  if (data->IsActual() && !obj_path.IsTop()) {
+    auto parent = obj_data_map_[obj_path.ParentPath()];
+    parent->AddChildInfo(DObjInfo(data->Path(), data->Type(), data->IsActual()));
+  }
 }
 
 void Session::Impl::AddErrorMessage(const std::string& msg) {

@@ -354,8 +354,6 @@ ObjectData::Impl::Impl(ObjectData* self,
     is_actual_(is_local) {
   InitCompareFunc();
   if (parent) {
-    if (is_local)
-      parent->AddChildInfo(DObjInfo(obj_path, type, is_local));
     if (parent->IsFlattened())
       is_flattened = true;
     auto parent_dir_path = parent->DirPath();
