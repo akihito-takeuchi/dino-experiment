@@ -114,8 +114,10 @@ DObjectTableModel::~DObjectTableModel() = default;
 void DObjectTableModel::InsertColumns(
     int col, const QList<ColumnInfo>& col_info_list) {
   beginInsertColumns(QModelIndex(), col, col + col_info_list.size() - 1);
-  for (auto& col_info : col_info_list)
+  for (auto& col_info : col_info_list) {
     impl_->col_info_list.insert(col, col_info);
+    ++ col;
+  }
   endInsertColumns();
 }
 
@@ -166,9 +168,9 @@ int DObjectTableModel::columnCount(const QModelIndex&) const {
 QVariant DObjectTableModel::headerData(
     int section, Qt::Orientation orient, int role) const {
   if (role != Qt::DisplayRole)
-    return QVariant();
+    return QAbstractTableModel::headerData(section, orient, role);;
   if (orient == Qt::Vertical)
-    return QVariant();
+    return QAbstractTableModel::headerData(section, orient, role);;
   return impl_->col_info_list[section].ColumnName();
 }
 
