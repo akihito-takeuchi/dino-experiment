@@ -56,6 +56,7 @@ class ObjectData {
   bool HasPersistentAttr(const std::string& key) const;
 
   std::string Type() const;
+  std::deque<std::string> TypeChain() const;
   FsPath DirPath() const;
   DObjPath Path() const;
 
@@ -110,6 +111,7 @@ class ObjectData {
 
   void Save(bool recurse);
   void RefreshChildren();
+  void SortChildren();
 
   void IncRef();
   void DecRef(bool by_editable_ref);

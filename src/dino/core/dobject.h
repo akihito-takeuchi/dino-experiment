@@ -65,18 +65,19 @@ class DObject {
   std::vector<DObjInfo> Children() const;
   DObjInfo ChildInfo(const std::string& name) const;
   size_t ChildCount() const;
-  DObjectSp GetChild(size_t index,
+  virtual DObjectSp GetChild(size_t index,
                              OpenMode mode = OpenMode::kReadOnly) const;
-  DObjectSp GetChild(const std::string& name,
-                     OpenMode mode = OpenMode::kReadOnly) const;
-  DObjectSp OpenChild(const std::string& name,
-                      OpenMode mode = OpenMode::kReadOnly) const;
-  DObjectSp CreateChild(const std::string& name,
-                        const std::string& type,
-                        bool is_flattened = false);
+  virtual DObjectSp GetChild(const std::string& name,
+                             OpenMode mode = OpenMode::kReadOnly) const;
+  virtual DObjectSp OpenChild(const std::string& name,
+                              OpenMode mode = OpenMode::kReadOnly) const;
+  virtual DObjectSp CreateChild(const std::string& name,
+                                const std::string& type,
+                                bool is_flattened = false);
   DObjectSp Parent() const;
   uintptr_t ObjectId() const;
   void RefreshChildren();
+  void SortChildren();
   bool IsFlattened() const;
   bool IsChildFlat(const std::string& name) const;
   void SetChildFlat(const std::string& name);
@@ -113,6 +114,9 @@ class DObject {
   ConstSessionPtr GetSession() const;
 
   static bool IsObjectDir(const FsPath &path);
+
+ protected:
+  virtual void PreSaveHook();
 
  private:
   friend class detail::ObjectData;

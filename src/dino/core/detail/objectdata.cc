@@ -260,6 +260,7 @@ class ObjectData::Impl {
   bool HasPersistentAttr(const std::string& key) const;
 
   std::string Type() const;
+  std::deque<std::string> TypeChain() const;
   FsPath DirPath() const;
   DObjPath Path() const;
 
@@ -320,6 +321,7 @@ class ObjectData::Impl {
   void Load();
   void Save(bool recurse);
   void RefreshChildren();
+  void SortChildren();
   ObjectData* FindTop() const;
 
   CommandStackSp EnableCommandStack(bool enable);
@@ -646,6 +648,17 @@ std::string ObjectData::Impl::Type() const {
   return type_;
 }
 
+std::deque<std::string> ObjectData::Impl::TypeChain() const {
+  std::deque<std::string> chain;
+  chain.push_front(Type());
+  auto current = parent_;
+  while (current) {
+    chain.push_front(current->Type());
+    current = current->impl_->parent_;
+  }
+  return chain;
+}
+
 FsPath ObjectData::Impl::DirPath() const {
   return dir_path_;
 }
@@ -807,7 +820,7 @@ void ObjectData::Impl::AddChildInfo(const DObjInfo& child_info) {
                                    return c.Name() == child_info.Name(); }),
                   children_.end());
   children_.emplace_back(child_info);
-  SortDObjInfoVector(children_, compare_func_);
+  SortChildren();
 }
 
 void ObjectData::Impl::DeleteChild(const std::string& name) {
@@ -1126,8 +1139,8 @@ void ObjectData::Impl::EnableSignal() {
 }
 
 void ObjectData::Impl::Save(bool recurse) {
-  if (!is_actual_ && EffectiveBases().size() > 0)
-    THROW1(kErrObjectIsNotActual, obj_path_.String());
+  if (!IsActual())
+    return;
   if (dir_path_.empty() && parent_ && !IsFlattened()) {
     auto cur_obj = FindTop();
     auto cur_dir = cur_obj->DirPath();
@@ -1155,9 +1168,9 @@ void ObjectData::Impl::Save(bool recurse) {
     for (auto& child_info : actual_children_) {
       if (IsChildOpened(child_info.Name()) && !IsChildFlat(child_info.Name())) {
         auto child = GetChild(
-            child_info.Name(), OpenMode::kReadOnly)->GetData();
-        if (child->IsActual())
-          child->Save(recurse);
+            child_info.Name(), OpenMode::kReadOnly);
+        child->SetEditable();
+        child->Save(recurse);
       }
     }
   }
@@ -1173,13 +1186,17 @@ void ObjectData::Impl::Save(const std::unique_ptr<DataIO>& io) {
   RemoveBaseFromDict(attrs_);
   io->ToSectionUp();
   io->ToChildrenSection();
-  for (auto& child : actual_children_) {
-    if (!IsChildFlat(child.Name()))
+  for (auto& child_info : children_) {
+    if (!IsChildFlat(child_info.Name()) && !IsFlattened())
       continue;
-    io->ToSection(child);
-    auto child_data = ChildData(child.Name(), false);
-    child_data->impl_->Save(io);
-    io->ToSectionUp();
+    auto child = GetChild(child_info.Name(), OpenMode::kReadOnly);
+    child->PreSaveHook();
+    if (child->IsActual()) {
+      io->ToSection(child_info);
+      auto child_data = ChildData(child_info.Name(), false);
+      child_data->impl_->Save(io);
+      io->ToSectionUp();
+    }
   }
   io->ToSectionUp();
   SetDirty(false);
@@ -1369,6 +1386,10 @@ void ObjectData::Impl::RefreshChildren() {
   RefreshChildrenInBase();
 }
 
+void ObjectData::Impl::SortChildren() {
+  SortDObjInfoVector(children_, compare_func_);
+}
+
 void ObjectData::Impl::RefreshActualChildren() {
   if (dir_path_.empty())
     return;
@@ -1407,7 +1428,7 @@ void ObjectData::Impl::RefreshActualChildren() {
       children_.end());
   children_.insert(
       children_.begin(), actual_children_.begin(), actual_children_.end());
-  SortDObjInfoVector(children_, compare_func_);
+  SortChildren();
 }
 
 void ObjectData::Impl::RefreshChildrenInBase() const {
@@ -1679,6 +1700,10 @@ std::string ObjectData::Type() const {
   return impl_->Type();
 }
 
+std::deque<std::string> ObjectData::TypeChain() const {
+  return impl_->TypeChain();
+}
+
 FsPath ObjectData::DirPath() const {
   return impl_->DirPath();
 }
@@ -1848,6 +1873,10 @@ void ObjectData::Save(bool recurse) {
 
 void ObjectData::RefreshChildren() {
   impl_->RefreshChildren();
+}
+
+void ObjectData::SortChildren() {
+  impl_->SortChildren();
 }
 
 std::string ObjectData::DataFileName() const {

@@ -4,6 +4,7 @@
 #include "dino/core/objectfactory.h"
 
 #include <map>
+#include <deque>
 
 #include "dino/core/detail/objectdata.h"
 
@@ -65,14 +66,20 @@ bool ObjectFactory::SetDefaultCreateFunc(const CreateFunc& func) {
 }
 
 DObject* ObjectFactory::Create(const DataWp& data) const {
-  auto type = data.lock()->Type();
-  auto itr = impl_->object_info_map.find(type);
-  if (itr != impl_->object_info_map.cend())
-    return itr->second.func(data);
-  else if (!impl_->use_default)
+  auto target = data.lock();
+  std::deque<std::string> type_chain = target->TypeChain();
+  std::string type_chain_str;
+  while (!type_chain.empty()) {
+    type_chain_str = boost::join(type_chain, "/");
+    auto itr = impl_->object_info_map.find(type_chain_str);
+    if (itr != impl_->object_info_map.cend())
+      return itr->second.func(data);
+    type_chain.pop_front();
+  }
+  if (!impl_->use_default)
     BOOST_THROW_EXCEPTION(
         ObjectFactoryException(kErrObjectTypeNotRegistered)
-        << ExpInfo1(type));
+        << ExpInfo1(target->Type()));
   return impl_->default_create_func(data);
 }
 

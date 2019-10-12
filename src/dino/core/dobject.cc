@@ -254,6 +254,10 @@ void DObject::RefreshChildren() {
   impl_->GetRawData()->RefreshChildren();
 }
 
+void DObject::SortChildren() {
+  impl_->GetRawData()->SortChildren();
+}
+
 bool DObject::IsFlattened() const {
   return impl_->GetRawData()->IsFlattened();
 }
@@ -355,7 +359,12 @@ CommandStackSp DObject::GetCommandStack() const {
 
 void DObject::Save(bool recurse) {
   REQUIRE_EDITABLE();
+  PreSaveHook();
   impl_->GetRawData()->Save(recurse);
+}
+
+// Do nothing. This will be implemented in the derived class
+void DObject::PreSaveHook() {
 }
 
 ConstSessionPtr DObject::GetSession() const {
