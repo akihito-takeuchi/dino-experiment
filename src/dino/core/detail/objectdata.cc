@@ -1950,7 +1950,7 @@ DataSp ObjectData::Create(const DObjPath& obj_path,
   auto data = std::shared_ptr<ObjectData>(
       new ObjectData(obj_path, type, parent, owner,
                      is_flattened, init_directory, is_actual));
-  if (parent && parent->IsFlattened()) {
+  if (parent && (parent->IsFlattened() || is_flattened)) {
     parent->impl_->SetChildFlat(obj_path.LeafName(), true);
     parent->SetDirty(true);
   }
