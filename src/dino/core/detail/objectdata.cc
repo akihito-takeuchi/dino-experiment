@@ -1189,7 +1189,7 @@ void ObjectData::Impl::Save(const std::unique_ptr<DataIO>& io) {
   for (auto& child_info : children_) {
     if (!IsChildFlat(child_info.Name()) && !IsFlattened())
       continue;
-    auto child = GetChild(child_info.Name(), OpenMode::kReadOnly);
+    auto child = OpenChild(child_info.Name(), OpenMode::kReadOnly);
     child->PreSaveHook();
     if (child->IsActual()) {
       io->ToSection(child_info);
