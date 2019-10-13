@@ -1,4 +1,4 @@
-// Copyright (c) 2018 Akihito Takeuchi
+// Copyright (c) 2019 Akihito Takeuchi
 // Distributed under the MIT License : http://opensource.org/licenses/MIT
 
 #include "dino/core/dobject.h"
