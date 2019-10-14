@@ -67,7 +67,7 @@ TEST_F(DataIOTest, SaveReadTest) {
   session->PurgeObject(path2);
   ASSERT_THROW(session->PurgeObject(path2), dc::DException);
   
-  ASSERT_THROW(session->GetObject(path2), dc::DException);
+  ASSERT_THROW(session->OpenObject(path2), dc::DException);
   obj = session->OpenTopLevelObject(kObjName2, kObjName2);
   obj->SetEditable();
   ASSERT_THROW(obj->Get("test"), dc::DException);

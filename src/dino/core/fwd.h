@@ -11,7 +11,6 @@ namespace core {
 
 class Session;
 using SessionPtr = std::shared_ptr<Session>;
-using ConstSessionPtr = std::shared_ptr<const Session>;
 
 class DObject;
 using DObjectSp = std::shared_ptr<DObject>;

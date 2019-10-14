@@ -72,7 +72,6 @@ class ObjectData {
   bool IsChildFlat(const std::string& name) const;
   void SetChildFlat(const std::string& name);
   void UnsetChildFlat(const std::string& name);
-  DObjectSp GetChild(const std::string& name, OpenMode mode) const;
   DObjectSp OpenChild(const std::string& name, OpenMode mode) const;
   DObjectSp CreateChild(const std::string& name,
                         const std::string& type,
@@ -118,7 +117,7 @@ class ObjectData {
 
   ObjectData* GetDataAt(const DObjPath& path);
 
-  ConstSessionPtr GetSession() const;
+  SessionPtr GetSession();
 
   static DataSp Create(const DObjPath& obj_path,
                        const std::string& type,

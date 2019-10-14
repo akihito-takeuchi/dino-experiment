@@ -26,7 +26,7 @@ int main(int argc, char* argv[]) {
       session->CreateTopLevelObject(name, kDinoTableType);
       session->InitTopLevelObjectPath(name, file_path);
     }
-    data = session->GetObject(name);
+    data = session->OpenObject(name);
   } else {
     std::cerr << "Specify directory\n";
     return -1;

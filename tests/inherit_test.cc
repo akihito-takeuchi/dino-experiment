@@ -680,7 +680,7 @@ TEST_F(InheritTest, DeepInheritance) {
     ASSERT_TRUE(c4->IsActual());
     ASSERT_EQ(c4->EffectiveBases().size(), 0u);
     auto base_top = top->Bases()[0];
-    auto base_c1 = base_top->GetChild(kChildName1, dc::OpenMode::kEditable);
+    auto base_c1 = base_top->OpenChild(kChildName1, dc::OpenMode::kEditable);
     auto base_c4 = base_c1->CreateChild(kChildName4, "test");
     base_c4->Put("key4", "child4");
     ASSERT_EQ(c1->ChildCount(), 2u);

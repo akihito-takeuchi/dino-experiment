@@ -218,17 +218,13 @@ size_t DObject::ChildCount() const {
   return impl_->GetRawData()->ChildCount();
 }
 
-DObjectSp DObject::GetChild(size_t index, OpenMode mode) const {
+DObjectSp DObject::GetChildAt(size_t index, OpenMode mode) const {
   auto raw_data = impl_->GetRawData();
   if (index > raw_data->ChildCount())
     BOOST_THROW_EXCEPTION(
         DObjectException(kErrChildIndexOutOfRange)
         << ExpInfo1(index) << ExpInfo2(Path().String()));
-  return raw_data->GetChild(raw_data->Children()[index].Name(), mode);
-}
-
-DObjectSp DObject::GetChild(const std::string& name, OpenMode mode) const {
-  return impl_->GetRawData()->GetChild(name, mode);
+  return raw_data->OpenChild(raw_data->Children()[index].Name(), mode);
 }
 
 DObjectSp DObject::OpenChild(const std::string& name, OpenMode mode) const {
@@ -367,7 +363,7 @@ void DObject::Save(bool recurse) {
 void DObject::PreSaveHook() {
 }
 
-ConstSessionPtr DObject::GetSession() const {
+SessionPtr DObject::GetSession() {
   return impl_->GetRawData()->GetSession();
 }
 

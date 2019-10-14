@@ -65,10 +65,8 @@ class DObject {
   std::vector<DObjInfo> Children() const;
   DObjInfo ChildInfo(const std::string& name) const;
   size_t ChildCount() const;
-  virtual DObjectSp GetChild(size_t index,
-                             OpenMode mode = OpenMode::kReadOnly) const;
-  virtual DObjectSp GetChild(const std::string& name,
-                             OpenMode mode = OpenMode::kReadOnly) const;
+  virtual DObjectSp GetChildAt(size_t index,
+                               OpenMode mode = OpenMode::kReadOnly) const;
   virtual DObjectSp OpenChild(const std::string& name,
                               OpenMode mode = OpenMode::kReadOnly) const;
   virtual DObjectSp CreateChild(const std::string& name,
@@ -111,7 +109,7 @@ class DObject {
 
   void Save(bool recurse = false);
 
-  ConstSessionPtr GetSession() const;
+  SessionPtr GetSession();
 
   static bool IsObjectDir(const FsPath &path);
 

@@ -48,12 +48,12 @@ TEST_F(ObjectTest, ExpectFail) {
   std::string child_path_str1 = kTopName2 + "/" + kChildName1;
   dc::DObjPath child_path1(child_path_str1);
   ASSERT_THROW(session->CreateObject(child_path1, "test"), dc::DException);
-  ASSERT_THROW(session->GetObject(top_path2), dc::DException);
+  ASSERT_THROW(session->OpenObject(top_path2), dc::DException);
   auto top = session->CreateTopLevelObject(kTopName1, kTopName1);
   ASSERT_THROW(session->CreateTopLevelObject(kTopName1, kTopName1),
                dc::DException);
   ASSERT_TRUE(top);
-  ASSERT_THROW(session->GetObject(child_path1), dc::DException);
+  ASSERT_THROW(session->OpenObject(child_path1), dc::DException);
   auto child = top->CreateChild(kChildName1, "test");
   ASSERT_TRUE(child);
   ASSERT_THROW(top->Save(), dc::DException);
@@ -74,7 +74,7 @@ TEST_F(ObjectTest, WriteRead) {
   }
   {
     dc::DObjectSp top;
-    ASSERT_THROW(top = session->GetObject(top_path1),
+    ASSERT_THROW(top = session->OpenObject(top_path1),
                  dc::DException);
     top = session->CreateTopLevelObject(kTopName1, kTopName1);
     ASSERT_TRUE(top);
@@ -98,7 +98,7 @@ TEST_F(ObjectTest, Hierarchy) {
   auto session = dc::Session::Create();
   auto top = session->CreateTopLevelObject(kTopName2, kTopName2);
   ASSERT_TRUE(top);
-  ASSERT_THROW(session->GetObject(dc::DObjPath(kTopName2 + "/" + kChildName1)),
+  ASSERT_THROW(session->OpenObject(dc::DObjPath(kTopName2 + "/" + kChildName1)),
                dc::DException);
   auto child1 = top->CreateChild(kChildName1, kChildName1);
   ASSERT_TRUE(child1);
@@ -111,9 +111,9 @@ TEST_F(ObjectTest, Hierarchy) {
 
   auto child1_path = top_obj_path.ChildPath(kChildName1);
   auto child2_path = child1_path.ChildPath(kChildName2);
-  ASSERT_THROW(session->GetObject(top_obj_path), dc::DException);
-  ASSERT_THROW(session->GetObject(child1_path), dc::DException);
-  ASSERT_THROW(session->GetObject(child2_path), dc::DException);
+  ASSERT_THROW(session->OpenObject(top_obj_path), dc::DException);
+  ASSERT_THROW(session->OpenObject(child1_path), dc::DException);
+  ASSERT_THROW(session->OpenObject(child2_path), dc::DException);
   ASSERT_THROW(session->OpenObject(child1_path), dc::DException);
   ASSERT_THROW(session->OpenObject(child2_path), dc::DException);
 
@@ -126,7 +126,6 @@ TEST_F(ObjectTest, Hierarchy) {
   ASSERT_TRUE(top->HasChild(kChildName1));
   ASSERT_FALSE(top->HasChild(kChildName2));
 
-  ASSERT_THROW(session->GetObject(child1_path), dc::DException);
   child1 = session->OpenObject(child1_path);
   ASSERT_TRUE(child1);
   child_info_list = child1->Children();
@@ -135,7 +134,6 @@ TEST_F(ObjectTest, Hierarchy) {
   ASSERT_TRUE(child1->HasChild(kChildName2));
   ASSERT_FALSE(child1->HasChild(kChildName1));
 
-  ASSERT_THROW(session->GetObject(child2_path), dc::DException);
   child2 = session->OpenObject(child2_path);
   ASSERT_TRUE(child2);
   child_info_list = child2->Children();
@@ -266,7 +264,7 @@ TEST_F(ObjectTest, Flat) {
     ASSERT_EQ(children_of_top[1].Name(), kChildName4);
     ASSERT_EQ(top->Type(), kTopName3);
 
-    auto child1 = session->GetObject(dc::DObjPath(path1_str));
+    auto child1 = session->OpenObject(dc::DObjPath(path1_str));
     ASSERT_TRUE(child1);
     ASSERT_TRUE(child1->IsFlattened());
     ASSERT_FALSE(child1->IsDirty());
@@ -276,21 +274,19 @@ TEST_F(ObjectTest, Flat) {
     ASSERT_EQ(children_of_child1[1].Name(), kChildName3);
     ASSERT_EQ(child1->Type(), child1_type);
 
-    auto child2 = session->GetObject(path2);
+    auto child2 = session->OpenObject(path2);
     child2 = session->CreateObject(path2, child2_type);
     ASSERT_TRUE(child2);
     ASSERT_FALSE(child2->IsDirty());
     ASSERT_EQ(child2->Children().size(), 0u);
     ASSERT_EQ(child2->Type(), child2_type);
 
-    auto child3 = session->GetObject(path3);
+    auto child3 = session->OpenObject(path3);
     ASSERT_TRUE(child3);
     ASSERT_FALSE(child3->IsDirty());
     ASSERT_EQ(child3->Children().size(), 0u);
     ASSERT_EQ(child3->Type(), child3_type);
 
-    ASSERT_THROW(session->GetObject(path4),
-                 dc::DException);
     auto child4 = session->OpenObject(path4);
     ASSERT_TRUE(child4);
     ASSERT_FALSE(child4->IsDirty());
@@ -400,12 +396,12 @@ TEST_F(ObjectTest, FlattenBeforeDirInit) {
     ASSERT_FALSE(top->IsFlattened());
     ASSERT_FALSE(top->IsDirty());
 
-    auto child1 = session->GetObject(path1);
+    auto child1 = session->OpenObject(path1);
     ASSERT_EQ(child1->Children().size(), 1u);
     ASSERT_TRUE(child1->IsFlattened());
     ASSERT_FALSE(child1->IsDirty());
 
-    auto child2 = session->GetObject(path2);
+    auto child2 = session->OpenObject(path2);
     ASSERT_EQ(child2->Children().size(), 0u);
     ASSERT_TRUE(child2->IsFlattened());
     ASSERT_FALSE(child2->IsDirty());

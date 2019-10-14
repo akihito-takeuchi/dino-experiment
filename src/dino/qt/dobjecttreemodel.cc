@@ -15,7 +15,7 @@ namespace {
 
 core::DObjectSp GetObjectAt(const core::DObjectSp& obj, int row) {
   auto child_info = obj->Children()[row];
-  return obj->GetChild(child_info.Name());
+  return obj->OpenChild(child_info.Name());
 }
 
 int GetRow(const core::DObjectSp& obj, const core::DObjectSp& child) {
@@ -43,7 +43,7 @@ class DObjectTreeModel::Impl {
       case core::CommandType::kAddChild:
       case core::CommandType::kAddFlattenedChild: {
         auto session = root_obj->GetSession();
-        auto obj = session->GetObject(cmd.ObjPath());
+        auto obj = session->OpenObject(cmd.ObjPath());
         auto child_name = cmd.TargetObjectName();
         auto children = cmd.PrevChildren();
         auto index = self->ObjectToIndex(obj);
@@ -64,7 +64,7 @@ class DObjectTreeModel::Impl {
       }
       case core::CommandType::kDeleteChild: {
         auto session = root_obj->GetSession();
-        auto obj = session->GetObject(cmd.ObjPath());
+        auto obj = session->OpenObject(cmd.ObjPath());
         auto child_name = cmd.TargetObjectName();
         auto children = cmd.PrevChildren();
         auto index = self->ObjectToIndex(obj);
@@ -87,7 +87,7 @@ class DObjectTreeModel::Impl {
       case core::CommandType::kValueUpdate:
       case core::CommandType::kValueDelete: {
         auto session = root_obj->GetSession();
-        auto obj = session->GetObject(cmd.ObjPath());
+        auto obj = session->OpenObject(cmd.ObjPath());
         auto col = KeyToCol(cmd.Key());
         auto index = self->ObjectToIndex(obj);
         if (col < self->columnCount(index))
@@ -235,7 +235,7 @@ QModelIndex DObjectTreeModel::parent(const QModelIndex& index) const {
 core::DObjectSp DObjectTreeModel::IndexToObject(const QModelIndex& index) const {
   if (!index.isValid())
     return impl_->root_obj;
-  return impl_->root_obj->GetSession()->GetObject(index.internalId());
+  return impl_->root_obj->GetSession()->GetObjectById(index.internalId());
 }
 
 QModelIndex DObjectTreeModel::ObjectToIndex(const core::DObjectSp& obj) const {
