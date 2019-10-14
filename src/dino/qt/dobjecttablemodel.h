@@ -19,7 +19,9 @@ namespace qt {
 class DObjectTableModel : public QAbstractTableModel {
   Q_OBJECT
  public:
-  DObjectTableModel(const core::DObjectSp& root_obj, QObject* parent = nullptr);
+  DObjectTableModel(const core::DObjectSp& root_obj,
+                    const core::DObjectSp& listen_to = nullptr,
+                    QObject* parent = nullptr);
   virtual ~DObjectTableModel();
   virtual void InsertColumns(int col, const QList<ColumnInfo>& col_info_list);
   virtual void RemoveColumns(int first, int last);

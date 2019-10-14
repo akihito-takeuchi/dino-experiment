@@ -94,17 +94,23 @@ class DObjectTableModel::Impl {
     return col;
   }
   core::DObjectSp root_obj;
+  core::DObjectSp listen_target;
   QList<ColumnInfo> col_info_list;
   DObjectTableModel* self;
 };
 
-DObjectTableModel::DObjectTableModel(const core::DObjectSp& root_obj, QObject* parent)
+DObjectTableModel::DObjectTableModel(const core::DObjectSp& root_obj,
+                                     const core::DObjectSp& listen_to,
+                                     QObject* parent)
     : QAbstractTableModel(parent), impl_(std::make_unique<Impl>(this)) {
   impl_->root_obj = root_obj;
-  impl_->root_obj->AddListener([this](auto& cmd) {
+  impl_->listen_target = listen_to;
+  if (!impl_->listen_target)
+    impl_->listen_target = root_obj;
+  impl_->listen_target->AddListener([this](auto& cmd) {
       this->impl_->PreUpdate(cmd);
     }, dino::core::ListenerCallPoint::kPre);
-  impl_->root_obj->AddListener([this](auto& cmd) {
+  impl_->listen_target->AddListener([this](auto& cmd) {
       this->impl_->PostUpdate(cmd);
     }, dino::core::ListenerCallPoint::kPost);
 }
@@ -189,6 +195,7 @@ Qt::ItemFlags DObjectTableModel::flags(const QModelIndex& index) const {
 bool DObjectTableModel::setData(
     const QModelIndex& index, const QVariant& value, int role) {
   auto obj = impl_->root_obj->GetChildAt(index.row());
+  obj->SetEditable();
   auto col_info = impl_->col_info_list[index.column()];
   return col_info.SetData(obj, value, role);
 }

@@ -12,9 +12,9 @@ namespace dino {
 
 namespace qt {
 
-struct DValueToQVariant : public boost::static_visitor<QVariant> {
+struct DToQConverter : public boost::static_visitor<QVariant> {
   QVariant operator()(dino::core::DNilType) const {
-    return "nil";
+    return QVariant();
   }
   QVariant operator()(int v) const {
     return v;
@@ -29,15 +29,39 @@ struct DValueToQVariant : public boost::static_visitor<QVariant> {
     return QString::fromStdString(v);
   }
   QVariant operator()(const std::vector<dino::core::DValue>& values) const {
-    std::vector<std::string> result_strs;
+    QVariantList result;
     std::transform(values.cbegin(), values.cend(),
-                   std::back_inserter(result_strs),
-                   [](auto& v) { return boost::apply_visitor(
-                       dino::core::detail::DValueToString(',', '(', ')'), v); });
-    return QString::fromStdString(
-        fmt::format("({})", boost::algorithm::join(result_strs, ",")));
+                   std::back_inserter(result),
+                   [](auto& v) {
+                     return boost::apply_visitor(DToQConverter(), v); });
+    return result;
   }
 };
+
+QVariant DValueToQVariant(const core::DValue& value) {
+  return boost::apply_visitor(DToQConverter(), value);
+}
+
+core::DValue QVariantToDValue(const QVariant& value) {
+  core::DValue result;
+  if (!value.isValid()) {
+    return dino::core::nil;
+  } else if (value.type() == QVariant::Int) {
+    result = value.toInt();
+  } else if (value.type() == QVariant::Double) {
+    result = value.toDouble();
+  } else if (value.type() == QVariant::Bool) {
+    result = value.toBool();
+  } else if (value.type() == QVariant::String) {
+    result = value.toString().toStdString();
+  } else if (value.type() == QVariant::List) {
+    core::DValueArray array;
+    for (auto& elem : value.toList())
+      array.push_back(QVariantToDValue(elem));
+    result = array;
+  }
+  return result;
+}
 
 ColumnInfo::ColumnInfo(
     const QString& col_name,
@@ -79,8 +103,7 @@ QVariant ColumnInfo::GetData(const core::DObjectSp& obj, int role) const {
       case SourceTypeConst::kType:
         return QString::fromStdString(obj->Type());
       case SourceTypeConst::kValue:
-        return boost::apply_visitor(
-            DValueToQVariant(),
+        return DValueToQVariant(
             obj->Get(source_name_.toStdString(), std::string()));
       default:
         break;

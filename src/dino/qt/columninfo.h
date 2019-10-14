@@ -5,9 +5,14 @@
 
 #include <functional>
 
+#include "dino/core/dvalue.h"
+
 namespace dino {
 
 namespace qt {
+
+QVariant DValueToQVariant(const core::DValue& value);
+core::DValue QVariantToDValue(const QVariant& value);
 
 enum class SourceTypeConst {
   kName,
