@@ -159,7 +159,8 @@ class ObjectData {
              Session* owner,
              bool is_flattened = false,
              bool init_directory = true,
-             bool is_actual = true);
+             bool is_actual = true,
+             bool enable_sorting = true);
   ObjectData(const FsPath& dir_path,
              const DObjPath& obj_path,
              const std::string& type,

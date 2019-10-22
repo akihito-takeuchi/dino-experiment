@@ -147,11 +147,13 @@ using DObjCompareFunc = std::function<
   bool (const DObjInfo& lhs, const DObjInfo& rhs)>;
 
 void SortDObjInfoVector(std::vector<DObjInfo>& obj_list,
-                        const DObjCompareFunc& comp) {
-  std::sort(obj_list.begin(),
-            obj_list.end(),
-            [&comp](const auto& lhs, const auto& rhs) {
-              return comp(lhs, rhs); });
+                        const DObjCompareFunc& comp,
+                        bool enable_sorting) {
+  if (enable_sorting)
+    std::sort(obj_list.begin(),
+              obj_list.end(),
+              [&comp](const auto& lhs, const auto& rhs) {
+                return comp(lhs, rhs); });
 }
 
 template<typename T>
@@ -231,7 +233,8 @@ class ObjectData::Impl {
        Session* owner,
        bool is_flattened,
        bool init_directory,
-       bool is_actual);
+       bool is_actual,
+       bool enable_sorting);
   Impl(ObjectData* self,
        const FsPath& dir_path,
        const DObjPath& obj_path,
@@ -408,6 +411,7 @@ class ObjectData::Impl {
   bool is_actual_ = false;
   DObjPath add_child_top_;
   DObjCompareFunc compare_func_;
+  bool enable_sorting_ = true;
 };
 
 ObjectData::Impl::Impl(ObjectData* self,
@@ -417,11 +421,12 @@ ObjectData::Impl::Impl(ObjectData* self,
                        Session* owner,
                        bool is_flattened,
                        bool init_directory,
-                       bool is_actual) :
+                       bool is_actual,
+                       bool enable_sorting) :
     self_(self), parent_(parent), obj_path_(obj_path),
     type_(type), owner_(owner),
     default_command_executer_(new CommandExecuter(owner, self)),
-    is_actual_(is_actual) {
+    is_actual_(is_actual), enable_sorting_(enable_sorting) {
   InitCompareFunc();
   if (parent) {
     if (parent->IsFlattened())
@@ -679,7 +684,7 @@ void ObjectData::Impl::SetIsActual(bool state) {
     if (state) {
       if (!parent_->HasActualChild(name)) {
         actual_children.push_back(res.Obj());
-        SortDObjInfoVector(actual_children, compare_func_);
+        SortDObjInfoVector(actual_children, compare_func_, enable_sorting_);
       }
       is_actual_ = true;
       parent_->impl_->SetIsActual(true);
@@ -1370,6 +1375,10 @@ void ObjectData::Impl::Load() {
       throw;
     }
   }
+  for (auto descendant : descendants) {
+    descendant->impl_->enable_sorting_ = true;
+    descendant->impl_->SortChildren();
+  }
   if (effective_base_info_list_.size() > 0)
     RefreshChildrenInBase();
   is_actual_ = true;
@@ -1382,7 +1391,7 @@ void ObjectData::Impl::RefreshChildren() {
 }
 
 void ObjectData::Impl::SortChildren() {
-  SortDObjInfoVector(children_, compare_func_);
+  SortDObjInfoVector(children_, compare_func_, enable_sorting_);
 }
 
 void ObjectData::Impl::RefreshActualChildren() {
@@ -1412,7 +1421,7 @@ void ObjectData::Impl::RefreshActualChildren() {
           DObjInfo(obj_path_.ChildPath(child_name), file_info.Type()));
     }
   }
-  SortDObjInfoVector(children, compare_func_);
+  SortDObjInfoVector(children, compare_func_, enable_sorting_);
   if (children == actual_children_)
     return;
   std::swap(actual_children_, children);
@@ -1444,7 +1453,7 @@ void ObjectData::Impl::RefreshChildrenInBase() const {
       children_.emplace_back(base_child);
     }
   }
-  SortDObjInfoVector(children_, compare_func_);
+  SortDObjInfoVector(children_, compare_func_, enable_sorting_);
 }
 
 void ObjectData::Impl::ProcessBaseObjectUpdate(
@@ -1550,7 +1559,7 @@ CreateChildFunc ObjectData::Impl::GenCreateChildFunc(
     auto child_path = parent->Path().ChildPath(obj_info.Name());
     DObjInfo child_info(child_path, obj_info.Type());
     auto data = std::shared_ptr<ObjectData>(new ObjectData(
-        child_path, obj_info.Type(), parent, owner_, true));
+        child_path, obj_info.Type(), parent, owner_, true, true, true, false));
     parent->SetChildFlat(obj_info.Name());
     descendants->emplace_back(data);
     auto arg = std::make_shared<ReadDataArg>(
@@ -1604,10 +1613,11 @@ ObjectData::ObjectData(const DObjPath& obj_path,
                        Session* owner,
                        bool is_flattened,
                        bool init_directory,
-                       bool is_actual) :
+                       bool is_actual,
+                       bool enable_sorting) :
     impl_(std::make_unique<Impl>(
         this, obj_path, type, parent, owner,
-        is_flattened, init_directory, is_actual)) {
+        is_flattened, init_directory, is_actual, enable_sorting)) {
 }
 
 ObjectData::ObjectData(const FsPath& dir_path,
