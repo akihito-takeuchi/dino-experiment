@@ -4,8 +4,10 @@
 #pragma once
 
 #include <functional>
+#include <QVariant>
 
 #include "dino/core/dvalue.h"
+#include "dino/core/dobject.h"
 
 namespace dino {
 

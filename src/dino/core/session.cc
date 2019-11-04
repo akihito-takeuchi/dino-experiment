@@ -166,14 +166,18 @@ void Session::Impl::PreOpenObjectCheck(
         << ExpInfo1(obj_path.String()));
 
   if (!obj_path.IsTop()) {
-    if (!FindTopObjPathInfo(obj_path.TopName()))
-      BOOST_THROW_EXCEPTION(
-          SessionException(kErrTopLevelObjectNotExist)
-          << ExpInfo1(obj_path.String()));
-    if (!HasObjectData(obj_path.Top()))
-      BOOST_THROW_EXCEPTION(
-          SessionException(kErrParentObjectNotOpened)
-          << ExpInfo1(obj_path.String()));
+    auto top_obj_path_info = FindTopObjPathInfo(obj_path.TopName());
+    auto has_object_data = HasObjectData(obj_path.Top());
+    if (!top_obj_path_info && !has_object_data) {
+      if (!top_obj_path_info)
+        BOOST_THROW_EXCEPTION(
+            SessionException(kErrTopLevelObjectNotExist)
+            << ExpInfo1(obj_path.String()));
+      else
+        BOOST_THROW_EXCEPTION(
+            SessionException(kErrParentObjectNotOpened)
+            << ExpInfo1(obj_path.String()));
+    }
     if (!dir_path.empty())
       BOOST_THROW_EXCEPTION(SessionException(kErrDirPathForNonTop));
     if (need_top_dir_path
@@ -203,6 +207,7 @@ std::vector<std::string> Session::Impl::TopObjectNames() const {
 DObjectSp Session::Impl::CreateTopLevelObject(
     const std::string& name, const std::string& type) {
   PreNewObjectCheck(DObjPath(name));
+  AddTopLevelObjectPath(name, FsPath());
   try {
     DObjPath obj_path(name);
     bool is_flattened = ObjectFactory::Instance().UpdateFlattenedFlag(
@@ -212,9 +217,9 @@ DObjectSp Session::Impl::CreateTopLevelObject(
         detail::ObjectData::Create(obj_path, type, nullptr,
                                    self_, is_flattened));
     DObjectSp obj(MakeObject(obj_path, OpenMode::kEditable));
-    AddTopLevelObjectPath(name, FsPath());
     return obj;
   } catch (const DException& e) {
+    RemoveTopLevelObjectPath(name);
     throw SessionException(e);
   }
 }
@@ -288,9 +293,9 @@ DObjectSp Session::Impl::OpenTopLevelObject(const FsPath& dir_path,
 
   try {
     auto abs_path = fs::absolute(dir_path);
+    AddTopLevelObjectPath(name, abs_path);
     auto data = detail::ObjectData::Open(obj_path, abs_path, nullptr, self_);
     RegisterObjectData(data);
-    AddTopLevelObjectPath(name, abs_path);
     data->Load();
     return MakeObject(obj_path, mode);
   } catch (const DException& e) {
@@ -420,7 +425,7 @@ void Session::Impl::PurgeObject(const DObjPath& obj_path, bool check_existence) 
           << ExpInfo1(obj_path.String()));
   } else {
     for (auto& child : obj_data_map_[obj_path]->Children())
-      PurgeObject(obj_path.ChildPath(child.Name()), check_existence);
+      PurgeObject(obj_path.ChildPath(child.Name()), false);
     obj_data_map_.erase(obj_path);
   }
   if (obj_path.IsTop())

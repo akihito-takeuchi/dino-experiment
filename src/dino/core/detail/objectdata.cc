@@ -1381,6 +1381,8 @@ void ObjectData::Impl::Load() {
   }
   if (effective_base_info_list_.size() > 0)
     RefreshChildrenInBase();
+  else
+    SortChildren();
   is_actual_ = true;
   SetDirty(false);
 }
