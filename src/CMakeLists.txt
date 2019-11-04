@@ -27,6 +27,7 @@ install(
 
 if(enable-qt)
   add_library(dino_qt
+    dino/qt/utils.cc
     dino/qt/columninfo.cc
     dino/qt/dobjecttablemodel.cc
     dino/qt/dobjecttreemodel.cc
