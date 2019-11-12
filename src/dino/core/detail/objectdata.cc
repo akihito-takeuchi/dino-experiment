@@ -249,6 +249,7 @@ class ObjectData::Impl {
   void Put(const std::string& key, const DValue& value);
   void RemoveKey(const std::string& key);
   bool IsLocalKey(const std::string& key) const;
+  bool HasNonLocalKey(const std::string& key) const;
   DObjPath WhereIsKey(const std::string& key) const;
   std::vector<std::string> Keys(bool local_only) const;
 
@@ -544,6 +545,14 @@ bool ObjectData::Impl::IsLocalKey(const std::string& key) const {
   return values_.find(key) != values_.cend();
 }
 
+bool ObjectData::Impl::HasNonLocalKey(const std::string& key) const {
+  std::unordered_set<std::string> keys;
+  for (auto& base : EffectiveBases())
+    for (auto& key : base->Keys(false))
+      keys.insert(key);
+  return keys.find(key) != keys.end();
+}
+
 struct WhereFuncInfo {
   WhereFuncInfo(const std::string& k, const DObjPath& p, Session* o)
       : key(k), path(p), owner(o) {}
@@ -573,6 +582,7 @@ std::vector<std::string> ObjectData::Impl::Keys(bool local_only) const {
   std::vector<std::string> result;
   result.reserve(keys.size());
   std::copy(keys.begin(), keys.end(), std::back_inserter(result));
+  std::sort(result.begin(), result.end());
   return result;
 }
 
@@ -1656,6 +1666,10 @@ void ObjectData::RemoveKey(const std::string& key) {
 
 bool ObjectData::IsLocalKey(const std::string& key) const {
   return impl_->IsLocalKey(key);
+}
+
+bool ObjectData::HasNonLocalKey(const std::string& key) const {
+  return impl_->HasNonLocalKey(key);
 }
 
 DObjPath ObjectData::WhereIsKey(const std::string& key) const {

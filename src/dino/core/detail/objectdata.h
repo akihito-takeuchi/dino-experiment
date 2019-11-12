@@ -42,6 +42,7 @@ class ObjectData {
   void Put(const std::string& key, const DValue& value);
   void RemoveKey(const std::string& key);
   bool IsLocalKey(const std::string& key) const;
+  bool HasNonLocalKey(const std::string& key) const;
   DObjPath WhereIsKey(const std::string& key) const;
   std::vector<std::string> Keys(bool local_only=false) const;
 

@@ -116,6 +116,10 @@ bool DObject::IsLocalKey(const std::string& key) const {
   return impl_->GetRawData()->IsLocalKey(key);
 }
 
+bool DObject::HasNonLocalKey(const std::string& key) const {
+  return impl_->GetRawData()->HasNonLocalKey(key);
+}
+
 DObjPath DObject::WhereIsKey(const std::string& key) const {
   return impl_->GetRawData()->WhereIsKey(key);
 }
