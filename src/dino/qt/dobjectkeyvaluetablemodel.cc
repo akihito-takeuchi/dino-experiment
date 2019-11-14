@@ -61,34 +61,59 @@ struct DValueToStringVisitor : public boost::static_visitor<QString> {
   }
 };
 
-QString DValueToString(const core::DValue& value) {
+QString DefaultValueToString(const core::DValue& value) {
   return boost::apply_visitor(DValueToStringVisitor(), value);
+}
+
+core::DValue DefaultStringToValue(const QString& value_str) {
+  bool conversion_succeeded;
+  auto value_str_trimmed = value_str.trimmed();
+  int int_val = value_str_trimmed.toInt(&conversion_succeeded);
+  if (conversion_succeeded)
+    return int_val;
+  double double_val = value_str_trimmed.toDouble(&conversion_succeeded);
+  if (conversion_succeeded)
+    return double_val;
+  if (value_str_trimmed == "nil")
+    return dino::core::nil;
+  if (value_str_trimmed == "true")
+    return true;
+  if (value_str_trimmed == "false")
+    return false;
+  return value_str_trimmed.toStdString();
+}
+
+DObjectKeyValueTableModel::CellStyle DefaultGetStyleFunc(const std::string&) {
+  return DObjectKeyValueTableModel::CellStyle();
 }
 
 }  // namespace
 
 class DObjectKeyValueTableModel::Impl {
  public:
+  struct ColInfo {
+    ColInfo() = default;
+    ColInfo(const QString& name,
+            const GetDataFuncType& get_data,
+            const GetStyleFuncType& get_style = DefaultGetStyleFunc)
+        : name(name), get_data(get_data), get_style(get_style) {
+      
+    }
+    QString name;
+    GetDataFuncType get_data;
+    GetStyleFuncType get_style;
+  };
   Impl(DObjectKeyValueTableModel* self)
       : self(self) {}
   ~Impl() = default;
 
-  ColumnType ColumnToType(int col) {
-    if (header_labels[col] == key_label)
-      return ColumnType::kKey;
-    else if (header_labels[col] == value_label)
-      return ColumnType::kValue;
-    else
-      return ColumnType::kType;
+  int ColumnToID(int col) {
+    if (col < col_id_list.count())
+      return col_id_list[col];
+    return -1;
   }
-  int TypeToColumn(ColumnType type) {
-    QString* target;
-    switch (type) {
-      case ColumnType::kKey:   target = &key_label;   break;
-      case ColumnType::kValue: target = &value_label; break;
-      case ColumnType::kType:  target = &type_label;  break;
-    }
-    return header_labels.indexOf(target);
+  int IDToColumn(int id) {
+    return col_id_list.indexOf(id);
   }
 
   void PreUpdate(const dino::core::Command& cmd) {
@@ -114,6 +139,10 @@ class DObjectKeyValueTableModel::Impl {
           self->beginRemoveRows(QModelIndex(), row, row);
           row_count_changing = true;
         }
+        break;
+      case core::CommandType::kAddBaseObject:
+      case core::CommandType::kRemoveBaseObject:
+        self->beginResetModel();
         break;
       default:
         break;
@@ -141,6 +170,10 @@ class DObjectKeyValueTableModel::Impl {
       case core::CommandType::kValueUpdate:
         need_data_changed_signal = true;
         break;
+      case core::CommandType::kAddBaseObject:
+      case core::CommandType::kRemoveBaseObject:
+        self->endResetModel();
+        break;
       default:
         break;
     }
@@ -148,8 +181,8 @@ class DObjectKeyValueTableModel::Impl {
       auto keys = root_obj->Keys();
       auto row = std::distance(keys.begin(),
                                std::find(keys.begin(), keys.end(), cmd.Key()));
-      auto index = self->createIndex(row, TypeToColumn(ColumnType::kValue));
-      emit self->dataChanged(index, index);
+      emit self->dataChanged(self->createIndex(row, 0),
+                             self->createIndex(row, col_id_list.count() - 1));
     }
   }
 
@@ -157,21 +190,14 @@ class DObjectKeyValueTableModel::Impl {
   core::DObjectSp root_obj;
   core::DObjectSp listen_target;
 
-  DValueToStringFunc value_to_string_func = DValueToString;
-  StringToDValueFunc string_to_value_func;
-  GetStyleFunc key_col_style_func;
-  GetStyleFunc value_col_style_func;
-  GetStyleFunc type_col_style_func;
+  DValueToStringFuncType value_to_string_func = DefaultValueToString;
+  StringToDValueFuncType string_to_value_func = DefaultStringToValue;
 
-  // Defaults
-  QString key_label = "Key";
-  QString type_label = "Type";
-  QString value_label = "Value";
-  QList<QString*> header_labels;
-  bool show_value_type = false;
-  int type_column = 1;
+  QMap<int, ColInfo> id_to_col_info;
+  QList<int> col_id_list;
 
   bool row_count_changing = false;
+  bool editable = false;
 };
 
 DObjectKeyValueTableModel::DObjectKeyValueTableModel(
@@ -190,30 +216,21 @@ DObjectKeyValueTableModel::DObjectKeyValueTableModel(
   impl_->listen_target->AddListener([this](auto& cmd) {
       this->impl_->PostUpdate(cmd);
     }, dino::core::ListenerCallPoint::kPost);
-  impl_->header_labels << &(impl_->key_label) << &(impl_->value_label);
+
+  // Setup defaults
+  impl_->id_to_col_info[kKeyColumnID] =
+      Impl::ColInfo("Key", GetDataFuncType());
+  impl_->id_to_col_info[kValueColumnID] =
+      Impl::ColInfo("Value", GetDataFuncType());
+  impl_->id_to_col_info[kValueTypeColumnID] =
+      Impl::ColInfo("ValueType",
+                    [this](auto& key) {
+                      return TypeString(this->impl_->root_obj->Get(key));
+                    });
+  impl_->col_id_list << kKeyColumnID << kValueColumnID;
 }
 
 DObjectKeyValueTableModel::~DObjectKeyValueTableModel() = default;
-
-bool DObjectKeyValueTableModel::ShowValueType() const {
-  return impl_->show_value_type;
-}
-
-void DObjectKeyValueTableModel::SetShowValueType(bool show) {
-  if (show != impl_->show_value_type) {
-    if (show) {
-      beginInsertColumns(QModelIndex(), impl_->type_column, impl_->type_column);
-      impl_->header_labels.insert(impl_->type_column, &(impl_->type_label));
-      impl_->show_value_type = show;
-      endInsertColumns();
-    } else {
-      beginRemoveColumns(QModelIndex(), impl_->type_column, impl_->type_column);
-      impl_->header_labels.removeOne(&(impl_->type_label));
-      impl_->show_value_type = show;
-      endRemoveColumns();
-    }
-  }
-}
 
 QVariant DObjectKeyValueTableModel::headerData(
     int section, Qt::Orientation orientation, int role) const {
@@ -221,12 +238,13 @@ QVariant DObjectKeyValueTableModel::headerData(
     return QVariant();
   if (orientation == Qt::Vertical)
     return QVariant();
-  return *(impl_->header_labels[section]);
+  auto col_id = impl_->col_id_list[section];
+  return impl_->id_to_col_info[col_id].name;
 }
 
 int DObjectKeyValueTableModel::columnCount(const QModelIndex& parent) const {
   Q_UNUSED(parent);
-  return impl_->header_labels.count();
+  return impl_->col_id_list.count();
 }
 
 int DObjectKeyValueTableModel::rowCount(const QModelIndex& parent) const {
@@ -240,70 +258,90 @@ int DObjectKeyValueTableModel::rowCount(const QModelIndex& parent) const {
 QVariant DObjectKeyValueTableModel::data(
     const QModelIndex& index, int role) const {
   auto key = impl_->root_obj->Keys()[index.row()];
-  auto col_type = impl_->ColumnToType(index.column());
+  auto col_id = impl_->ColumnToID(index.column());
   if (role == Qt::DisplayRole) {
-    switch (col_type) {
-      case ColumnType::kKey:
+    switch (col_id) {
+      case ColumnID::kKeyColumnID:
         return QString::fromStdString(key);
-      case ColumnType::kValue:
+      case ColumnID::kValueColumnID:
         return impl_->value_to_string_func(impl_->root_obj->Get(key));
-      case ColumnType::kType:
-        return TypeString(impl_->root_obj->Get(key));
+      default:
+        return impl_->id_to_col_info[col_id].get_data(key);
     }
   } else if (role == Qt::ForegroundRole) {
-    switch (col_type) {
-      case ColumnType::kKey:
-        return impl_->key_col_style_func(key).foreground_color;
-      case ColumnType::kValue:
-        return impl_->value_col_style_func(key).foreground_color;
-      case ColumnType::kType:
-        return impl_->type_col_style_func(key).foreground_color;
-    }
+    return impl_->id_to_col_info[col_id].get_style(key).foreground_color;
   } else if (role == Qt::BackgroundRole) {
-    switch (col_type) {
-      case ColumnType::kKey:
-        return impl_->key_col_style_func(key).background_color;
-      case ColumnType::kValue:
-        return impl_->value_col_style_func(key).background_color;
-      case ColumnType::kType:
-        return impl_->type_col_style_func(key).background_color;
-    }
+    return impl_->id_to_col_info[col_id].get_style(key).background_color;
   } else if (role == Qt::FontRole) {
-    switch (col_type) {
-      case ColumnType::kKey:
-        return impl_->key_col_style_func(key).font;
-      case ColumnType::kValue:
-        return impl_->value_col_style_func(key).font;
-      case ColumnType::kType:
-        return impl_->type_col_style_func(key).font;
-    }
+    return impl_->id_to_col_info[col_id].get_style(key).font;
   }
   return QVariant();
 }
 
 Qt::ItemFlags DObjectKeyValueTableModel::flags(
     const QModelIndex& index) const {
-  auto col_type = impl_->ColumnToType(index.column());
-  if (col_type == ColumnType::kValue)
+  auto col_type = impl_->ColumnToID(index.column());
+  if (col_type == ColumnID::kValueColumnID && impl_->editable)
     return Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable;
   return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
 }
 
 bool DObjectKeyValueTableModel::setData(
     const QModelIndex& index, const QVariant& value, int role) {
-  if (role != Qt::EditRole)
+  if (role != Qt::EditRole || !impl_->editable)
     return false;
-  auto col_type = impl_->ColumnToType(index.column());
-  if (col_type != ColumnType::kValue)
+  auto col_type = impl_->ColumnToID(index.column());
+  if (col_type != ColumnID::kValueColumnID)
     return false;
   auto key = impl_->root_obj->Keys()[index.row()];
   impl_->root_obj->Put(key, impl_->string_to_value_func(value.toString()));
   return true;
 }
 
+int DObjectKeyValueTableModel::CreateUserColumn(
+    const QString& name, const GetDataFuncType& get_data_func) {
+  auto ids = impl_->id_to_col_info.keys();
+  auto new_id = ids.last() + 1;
+  impl_->id_to_col_info[new_id] = Impl::ColInfo(name, get_data_func);
+  return new_id;
+}
+
+QList<int> DObjectKeyValueTableModel::DisplayedColumnIDs() const {
+  return impl_->col_id_list;
+}
+
+void DObjectKeyValueTableModel::InsertColumnIDs(
+    int pos, const QList<int>& column_ids) {
+  beginInsertColumns(QModelIndex(), pos, pos + column_ids.size() - 1);
+  for (auto& col_id : column_ids) {
+    impl_->col_id_list.insert(pos, col_id);
+    ++ pos;
+  }
+  endInsertColumns();
+}
+
+void DObjectKeyValueTableModel::RemoveColumnIDs(const QList<int>& column_ids) {
+  for (auto& col_id : column_ids) {
+    auto col = impl_->col_id_list.indexOf(col_id);
+    if (col < 0)
+      continue;
+    beginRemoveColumns(QModelIndex(), col, col);
+    impl_->col_id_list.removeOne(col_id);
+    endRemoveColumns();
+  }
+}
+
+void DObjectKeyValueTableModel::SetColumnName(
+    int column_id, const QString& name) {
+  impl_->id_to_col_info[column_id].name = name;
+  auto col = impl_->col_id_list.indexOf(column_id);
+  if (col >= 0)
+    emit headerDataChanged(Qt::Horizontal, col, col);
+}
+
 void DObjectKeyValueTableModel::SetConversionFunc(
-    const DValueToStringFunc& value_to_string_func,
-    const StringToDValueFunc& string_to_value_func) {
+    const DValueToStringFuncType& value_to_string_func,
+    const StringToDValueFuncType& string_to_value_func) {
   if (value_to_string_func)
     impl_->value_to_string_func = value_to_string_func;
   if (string_to_value_func)
@@ -311,15 +349,16 @@ void DObjectKeyValueTableModel::SetConversionFunc(
 }
 
 void DObjectKeyValueTableModel::SetStyleFunc(
-    const GetStyleFunc& key_col_style_func,
-    const GetStyleFunc& value_col_style_func,
-    const GetStyleFunc& type_col_style_func) {
-  if (key_col_style_func)
-    impl_->key_col_style_func = key_col_style_func;
-  if (value_col_style_func)
-    impl_->value_col_style_func = value_col_style_func;
-  if (type_col_style_func)
-    impl_->type_col_style_func = type_col_style_func;
+    int column_id, const GetStyleFuncType& get_style_func) {
+  impl_->id_to_col_info[column_id].get_style = get_style_func;
+}
+
+bool DObjectKeyValueTableModel::IsEditable() const {
+  return impl_->editable;
+}
+
+void DObjectKeyValueTableModel::SetEditable(bool editable) {
+  impl_->editable = editable;
 }
 
 }  // namespace qt
