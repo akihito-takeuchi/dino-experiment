@@ -20,20 +20,18 @@ enum class SourceTypeConst {
   kChildObject
 };
 
-using GetDataFuncType =
-    std::function<QVariant (const core::DObjectSp& target,
-                            int role)>;
-
-using SetDataFuncType =
-    std::function<bool (const core::DObjectSp& target,
-                        const QVariant& data,
-                        int role)>;
-
-using GetFlagsFuncType =
-    std::function<Qt::ItemFlags (const core::DObjectSp& target)>;
-
 class ColumnInfo {
  public:
+  using GetDataFuncType =
+      std::function<QVariant (const core::DObjectSp& target,
+                              int role)>;
+  using SetDataFuncType =
+      std::function<bool (const core::DObjectSp& target,
+                          const QVariant& data,
+                          int role)>;
+  using GetFlagsFuncType =
+      std::function<Qt::ItemFlags (const core::DObjectSp& target)>;
+
   ColumnInfo(const QString& col_name,
              SourceTypeConst source_type,
              const QString& source_name,
