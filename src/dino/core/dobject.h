@@ -74,6 +74,7 @@ class DObject {
                                 const std::string& type,
                                 bool is_flattened = false);
   DObjectSp Parent() const;
+  DObjectSp TopLevelObject() const;
   uintptr_t ObjectId() const;
   void RefreshChildren();
   void SortChildren();
@@ -110,7 +111,7 @@ class DObject {
 
   void Save(bool recurse = false);
 
-  SessionPtr GetSession();
+  SessionPtr GetSession() const;
 
   static bool IsObjectDir(const FsPath &path);
 

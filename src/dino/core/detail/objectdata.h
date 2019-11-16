@@ -78,6 +78,7 @@ class ObjectData {
                         const std::string& type,
                         bool is_flattened);
   DObjectSp Parent() const;
+  DObjectSp TopLevelObject() const;
   uintptr_t ObjectId() const;
   void RemoveChild(const std::string& name);
   void AddChildInfo(const DObjInfo& child_info);

@@ -246,6 +246,10 @@ DObjectSp DObject::Parent() const {
   return impl_->GetRawData()->Parent();
 }
 
+DObjectSp DObject::TopLevelObject() const {
+  return impl_->GetRawData()->TopLevelObject();
+}
+
 uintptr_t DObject::ObjectId() const {
   return impl_->GetRawData()->ObjectId();
 }
@@ -367,7 +371,7 @@ void DObject::Save(bool recurse) {
 void DObject::PreSaveHook() {
 }
 
-SessionPtr DObject::GetSession() {
+SessionPtr DObject::GetSession() const {
   return impl_->GetRawData()->GetSession();
 }
 

@@ -286,6 +286,7 @@ class ObjectData::Impl {
                         const std::string& type,
                         bool is_flattened);
   DObjectSp Parent() const;
+  DObjectSp TopLevelObject() const;
   DObjectSp GetObjectByPath(const DObjPath& obj_path, OpenMode mode);
   void AddChildInfo(const DObjInfo& child_info);
   void DeleteChild(const std::string& name);
@@ -814,6 +815,10 @@ DObjectSp ObjectData::Impl::Parent() const {
   if (!parent_)
     return nullptr;
   return owner_->OpenObject(obj_path_.ParentPath(), OpenMode::kReadOnly);
+}
+
+DObjectSp ObjectData::Impl::TopLevelObject() const {
+  return owner_->OpenObject(obj_path_.Top());
 }
 
 DObjectSp ObjectData::Impl::GetObjectByPath(const DObjPath& obj_path,
@@ -1793,6 +1798,10 @@ DObjectSp ObjectData::CreateChild(const std::string& name,
 
 DObjectSp ObjectData::Parent() const {
   return impl_->Parent();
+}
+
+DObjectSp ObjectData::TopLevelObject() const {
+  return impl_->TopLevelObject();
 }
 
 uintptr_t ObjectData::ObjectId() const {
