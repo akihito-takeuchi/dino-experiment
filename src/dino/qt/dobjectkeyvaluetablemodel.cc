@@ -259,7 +259,7 @@ QVariant DObjectKeyValueTableModel::data(
     const QModelIndex& index, int role) const {
   auto key = impl_->root_obj->Keys()[index.row()];
   auto col_id = impl_->ColumnToID(index.column());
-  if (role == Qt::DisplayRole) {
+  if (role == Qt::DisplayRole || role == Qt::EditRole) {
     switch (col_id) {
       case ColumnID::kKeyColumnID:
         return QString::fromStdString(key);
