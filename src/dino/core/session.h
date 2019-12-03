@@ -5,6 +5,7 @@
 
 #include <string>
 #include <vector>
+#include <functional>
 
 #include "dino/core/fspath.h"
 #include "dino/core/dobjpath.h"
@@ -23,6 +24,7 @@ class ObjectData;
 
 class Session : public std::enable_shared_from_this<Session> {
  public:
+  using PreOpenHookFuncType = std::function<void (const DObjPath&, OpenMode)>;
   Session(const Session&) = delete;
   Session& operator=(const Session&) = delete;
   ~Session();
@@ -45,6 +47,7 @@ class Session : public std::enable_shared_from_this<Session> {
   void DeleteObject(const DObjPath& obj_path);
   void RemoveTopLevelObject(const std::string& name, bool delete_files = false);
   void PurgeObject(const DObjPath& obj_path);
+  void SetPreOpenHook(const PreOpenHookFuncType& pre_open_hook);
 
   static SessionPtr Create();
 

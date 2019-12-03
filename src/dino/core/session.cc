@@ -78,8 +78,10 @@ class Session::Impl {
                                OpenMode mode);
   void OpenDataAtPath(const DObjPath& path, const FsPath& top_dir);
   DObjectSp OpenObject(const DObjPath& obj_path, OpenMode mode);
+  void ExecPreOpenHook(const DObjPath& obj_path, OpenMode mode);
   void DeleteObjectImpl(const DObjPath& obj_path, bool delete_files = true);
   void PurgeObject(const DObjPath& obj_path, bool check_existence = true);
+  void SetPreOpenHook(const PreOpenHookFuncType& pre_open_hook);
   void RegisterObjectData(const detail::DataSp& data);
   FsPath WorkspaceFilePath() const;
 
@@ -89,6 +91,7 @@ class Session::Impl {
                      detail::DataSp,
                      DObjPath::Hash> obj_data_map_;
   Session* self_;
+  PreOpenHookFuncType pre_open_hook_;
 };
 
 void Session::Impl::AddTopLevelObjectPath(const std::string& name,
@@ -372,6 +375,11 @@ DObjectSp Session::Impl::OpenObject(const DObjPath& obj_path, OpenMode mode) {
   }
 }
 
+void Session::Impl::ExecPreOpenHook(const DObjPath& obj_path, OpenMode mode) {
+  if (pre_open_hook_)
+    pre_open_hook_(obj_path, mode);
+}
+
 void Session::Impl::DeleteObjectImpl(const DObjPath& obj_path,
                                      bool delete_files) {
   FsPath dir_to_remove;
@@ -432,6 +440,10 @@ void Session::Impl::PurgeObject(const DObjPath& obj_path, bool check_existence) 
     RemoveTopLevelObjectPath(obj_path.TopName());
 }
 
+void Session::Impl::SetPreOpenHook(const PreOpenHookFuncType& pre_open_hook) {
+  pre_open_hook_ = pre_open_hook;
+}
+
 void Session::Impl::RegisterObjectData(const detail::DataSp& data) {
   auto obj_path = data->Path();
   if (HasObjectData(obj_path))
@@ -487,6 +499,7 @@ DObjectSp Session::CreateObjectImpl(const DObjPath& obj_path,
 }
 
 DObjectSp Session::OpenObject(const DObjPath& obj_path, OpenMode mode) {
+  impl_->ExecPreOpenHook(obj_path, mode);
   return impl_->OpenObject(obj_path, mode);
 }
 
@@ -518,6 +531,10 @@ void Session::DeleteObjectImpl(const DObjPath& obj_path) {
 
 void Session::PurgeObject(const DObjPath& obj_path) {
   impl_->PurgeObject(obj_path);
+}
+
+void Session::SetPreOpenHook(const PreOpenHookFuncType& pre_open_hook) {
+  impl_->SetPreOpenHook(pre_open_hook);
 }
 
 void Session::RegisterObjectData(const detail::DataSp& data) {
