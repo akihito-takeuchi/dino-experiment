@@ -6,6 +6,7 @@
 #include "dino/core/fwd.h"
 #include "dino/core/command.h"
 #include "dino/core/dobjpath.h"
+#include "dino/core/callback.h"
 
 namespace dino {
 
@@ -40,7 +41,8 @@ class CommandExecuter {
       detail::ObjectData* data,
       const std::string& child_name,
       const std::string& obj_type,
-      bool is_flattened);
+      bool is_flattened,
+      const PostCreateFunc& post_func);
   CommandExecuter(Session* session, detail::ObjectData* root_data);
 
   Session* session_;

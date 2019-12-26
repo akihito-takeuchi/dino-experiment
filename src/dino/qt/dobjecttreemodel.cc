@@ -14,8 +14,10 @@ namespace qt {
 namespace {
 
 core::DObjectSp GetObjectAt(const core::DObjectSp& obj, int row) {
-  auto child_info = obj->Children()[row];
-  return obj->OpenChild(child_info.Name());
+  auto children = obj->Children();
+  if (row >= static_cast<int>(children.size()))
+    return nullptr;
+  return obj->OpenChild(children[row].Name());
 }
 
 int GetRow(const core::DObjectSp& obj, const core::DObjectSp& child) {
@@ -58,8 +60,11 @@ class DObjectTreeModel::Impl {
           }
           row ++;
         }
-        if (!already_exists)
+        if (!already_exists) {
+          inserting_row = row;
+          parent_of_inserting_row = index;
           self->beginInsertRows(index, row, row);
+        }
         break;
       }
       case core::CommandType::kDeleteChild: {
@@ -101,7 +106,29 @@ class DObjectTreeModel::Impl {
         break;
       case core::CommandType::kAddChild:
       case core::CommandType::kAddFlattenedChild:
-        self->endInsertRows();
+        {
+          if (inserting_row >= 0) {
+            self->endInsertRows();
+            auto session = root_obj->GetSession();
+            auto children = session->OpenObject(cmd.ObjPath())->Children();
+            auto row= std::distance(
+                children.cbegin(),
+                std::find_if(
+                    children.cbegin(), children.cend(),
+                    [cmd](auto& child_info) {
+                      return child_info.Name() == cmd.TargetObjectName();
+                    }));
+            if (inserting_row != row) {
+              if (row > inserting_row)
+                row ++;
+              self->beginMoveRows(
+                  parent_of_inserting_row, inserting_row, inserting_row,
+                  parent_of_inserting_row, row);
+              self->endMoveRows();
+            }
+          }
+          inserting_row = -1;
+        }
         break;
       case core::CommandType::kDeleteChild:
         self->endRemoveRows();
@@ -134,18 +161,25 @@ class DObjectTreeModel::Impl {
     return QModelIndex();
   }
   core::DObjectSp root_obj;
+  core::DObjectSp listen_target;
   QList<ColumnInfo> col_info_list;
   DObjectTreeModel* self;
+  int inserting_row = -1;
+  QModelIndex parent_of_inserting_row;
 };
 
 DObjectTreeModel::DObjectTreeModel(const core::DObjectSp& root_obj,
+                                   const core::DObjectSp& listen_to,
                                    QObject* parent)
     : QAbstractItemModel(parent), impl_(std::make_unique<Impl>(this)) {
   impl_->root_obj = root_obj;
-  impl_->root_obj->AddListener([this](auto& cmd) {
+  impl_->listen_target = listen_to;
+  if (!impl_->listen_target)
+    impl_->listen_target = root_obj;
+  impl_->listen_target->AddListener([this](auto& cmd) {
       this->impl_->PreUpdate(cmd);
     }, core::ListenerCallPoint::kPre);
-  impl_->root_obj->AddListener([this](auto& cmd) {
+  impl_->listen_target->AddListener([this](auto& cmd) {
       this->impl_->PostUpdate(cmd);
     }, core::ListenerCallPoint::kPost);
 }
@@ -208,6 +242,8 @@ QModelIndex DObjectTreeModel::index(int row, int column,
                                     const QModelIndex& parent) const {
   auto parent_obj = IndexToObject(parent);
   auto obj = GetObjectAt(parent_obj, row);
+  if (!obj)
+    return QModelIndex();
   return createIndex(row, column, obj->ObjectId());
 }
 

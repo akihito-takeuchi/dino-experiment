@@ -6,8 +6,8 @@
 #include <functional>
 #include <boost/signals2.hpp>
 
-#include "dino/core/dvalue.h"
 #include "dino/core/command.h"
+#include "dino/core/fwd.h"
 
 namespace dino {
 
@@ -21,6 +21,7 @@ enum class ListenerCallPoint {
 
 using CommandStackListenerFunc = std::function<void ()>;
 using ObjectListenerFunc = std::function<void (const Command&)>;
+using PostCreateFunc = std::function<void (const DObjectSp&)>;
 
 }  // namespace core
 

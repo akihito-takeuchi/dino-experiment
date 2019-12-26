@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "dino/core/commandexecuter.h"
-#include "dino/core/connection.h"
+#include "dino/core/callback.h"
 
 namespace dino {
 
@@ -48,21 +48,26 @@ class CommandStack : public CommandExecuter {
       detail::ObjectData* data,
       const std::string& child_name,
       const std::string& obj_type,
-      bool is_flattened) override;
+      bool is_flattened,
+      const PostCreateFunc& post_func) override;
 
   struct RemovedData;
   using RemovedDataSp = std::shared_ptr<RemovedData>;
-  using CommandData = std::pair<Command, RemovedDataSp>;
+  using CommandData = std::tuple<Command, RemovedDataSp, PostCreateFunc>;
   using BatchCommandData = std::vector<CommandData>;
 
-  void PushCommand(const Command& cmd);
+  void PushCommand(const Command& cmd,
+                   const PostCreateFunc& post_func = PostCreateFunc());
   void ExecRedo(CommandData& cmd_data);
   void ExecUndo(CommandData& cmd_data);
   void StoreChildData(detail::ObjectData* obj,
                       const std::string& child_name,
                       const RemovedDataSp& data);
   void RestoreChildData(detail::ObjectData* obj,
-                        const RemovedDataSp& data);
+                        const RemovedDataSp& data,
+                        bool emit_signal);
+  void PutObjectData(detail::ObjectData* obj,
+                     const RemovedDataSp& data);
   void PushBatchCommand(const std::string& description,
                         const BatchCommandData& batch_data,
                         bool emit_signal = true);

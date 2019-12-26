@@ -99,6 +99,18 @@ inline bool operator!=(const char* lhs, const DValue& rhs) {
   return !(rhs == lhs);
 }
 
+inline DValueArray ToDValueArray(const DValue& value) {
+  DValueArray values;
+  if (value == nil)
+    return values;
+  try {
+    values = boost::get<DValueArray>(value);
+  } catch (const boost::bad_get&) {
+    values.push_back(value);
+  }
+  return values;
+}
+
 namespace detail {
 
 class DValueToString : public boost::static_visitor<std::string> {

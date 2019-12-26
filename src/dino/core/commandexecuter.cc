@@ -45,12 +45,14 @@ DObjectSp CommandExecuter::UpdateChildList(CommandType type,
                                            detail::ObjectData* data,
                                            const std::string& child_name,
                                            const std::string& obj_type,
-                                           bool is_flattened) {
+                                           bool is_flattened,
+                                           const PostCreateFunc& post_func) {
   auto edit_type = static_cast<CommandType>(
       static_cast<int>(type) & static_cast<int>(CommandType::kEditTypeMask));
   DObjectSp child;
   if (edit_type == CommandType::kAdd) {
-    child = data->ExecCreateChild(child_name, obj_type, is_flattened);
+    child = data->ExecCreateChild(
+        child_name, obj_type, is_flattened, true, post_func);
   } else if (edit_type == CommandType::kDelete) {
     data->ExecDeleteChild(child_name);
   }

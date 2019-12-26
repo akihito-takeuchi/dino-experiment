@@ -16,7 +16,7 @@
 #include "dino/core/dobjfileinfo.h"
 #include "dino/core/dvalue.h"
 #include "dino/core/filetypes.h"
-#include "dino/core/connection.h"
+#include "dino/core/callback.h"
 #include "dino/core/detail/dataio.h"
 
 namespace dino {
@@ -76,7 +76,8 @@ class ObjectData {
   DObjectSp OpenChild(const std::string& name, OpenMode mode) const;
   DObjectSp CreateChild(const std::string& name,
                         const std::string& type,
-                        bool is_flattened);
+                        bool is_flattened,
+                        const PostCreateFunc& post_func);
   DObjectSp Parent() const;
   DObjectSp TopLevelObject() const;
   uintptr_t ObjectId() const;
@@ -145,9 +146,12 @@ class ObjectData {
                        const DValue& prev_value);
   void ExecAddValue(const std::string& key,
                     const DValue& new_value);
-  DObjectSp ExecCreateChild(const std::string& name,
-                            const std::string& type,
-                            bool is_flattened);
+  DObjectSp ExecCreateChild(
+      const std::string& name,
+      const std::string& type,
+      bool is_flattened,
+      bool emit_signal = true,
+      const PostCreateFunc& post_create_func = PostCreateFunc());
   void ExecDeleteChild(const std::string& name);
   void ExecAddBase(const DObjectSp& base);
   void ExecRemoveBase(const DObjectSp& base);

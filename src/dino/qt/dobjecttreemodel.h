@@ -17,6 +17,7 @@ class DObjectTreeModel : public QAbstractItemModel {
   Q_OBJECT
  public:
   DObjectTreeModel(const core::DObjectSp& root_obj,
+                   const core::DObjectSp& listen_to = nullptr,
                    QObject* parent = nullptr);
   virtual ~DObjectTreeModel();
 

@@ -99,6 +99,7 @@ DValue DObject::Get(const std::string& key) const {
 }
 
 void DObject::Put(const std::string& key, const char* str_value) {
+  REQUIRE_EDITABLE();
   Put(key, DValue(std::string(str_value)));
 }
 
@@ -237,9 +238,10 @@ DObjectSp DObject::OpenChild(const std::string& name, OpenMode mode) const {
 
 DObjectSp DObject::CreateChild(const std::string& name,
                                const std::string& type,
-                               bool is_flattened) {
+                               bool is_flattened,
+                               const PostCreateFunc& post_func) {
   REQUIRE_EDITABLE();
-  return impl_->GetRawData()->CreateChild(name, type, is_flattened);
+  return impl_->GetRawData()->CreateChild(name, type, is_flattened, post_func);
 }
 
 DObjectSp DObject::Parent() const {

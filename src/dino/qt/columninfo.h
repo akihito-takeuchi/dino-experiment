@@ -17,7 +17,8 @@ enum class SourceTypeConst {
   kName,
   kType,
   kValue,
-  kChildObject
+  kChildObject,
+  kCustom
 };
 
 class ColumnInfo {

@@ -1,3 +1,4 @@
+
 // Copyright (c) 2018 Akihito Takeuchi
 // Distributed under the MIT License : http://opensource.org/licenses/MIT
 
@@ -41,6 +42,8 @@ extern const int kErrObjectIsNotActual = RegisterErrorCode(
     314, "The object '{}' is not actual.", 1);
 extern const int kErrAttrDoesNotExist = RegisterErrorCode(
     314, "The object '{}' does not have attribute '{}'.", 2);
+extern const int kErrReservedAttrCantBeUsed = RegisterErrorCode(
+    315, "The attr '{}' is reserved by system.", 1);
 
 extern const int kErrUnknownFileFormat = RegisterErrorCode(
     400, "Unknown file format number '{}'", 1);

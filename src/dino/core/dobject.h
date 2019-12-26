@@ -12,7 +12,7 @@
 #include "dino/core/dobjpath.h"
 #include "dino/core/dobjinfo.h"
 #include "dino/core/dvalue.h"
-#include "dino/core/connection.h"
+#include "dino/core/callback.h"
 #include "dino/core/fwd.h"
 
 namespace dino {
@@ -70,9 +70,11 @@ class DObject {
                                OpenMode mode = OpenMode::kReadOnly) const;
   virtual DObjectSp OpenChild(const std::string& name,
                               OpenMode mode = OpenMode::kReadOnly) const;
-  virtual DObjectSp CreateChild(const std::string& name,
-                                const std::string& type,
-                                bool is_flattened = false);
+  virtual DObjectSp CreateChild(
+      const std::string& name,
+      const std::string& type,
+      bool is_flattened = false,
+      const PostCreateFunc& post_func = PostCreateFunc());
   DObjectSp Parent() const;
   DObjectSp TopLevelObject() const;
   uintptr_t ObjectId() const;
@@ -120,6 +122,7 @@ class DObject {
 
  private:
   friend class detail::ObjectData;
+  friend class CommandStack;
   detail::ObjectData* GetData();
   
   struct Impl;

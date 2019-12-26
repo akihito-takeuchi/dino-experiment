@@ -19,6 +19,8 @@ struct CommandStack::RemovedData {
   std::string name;
   std::string type;
   DValueDict values;
+  std::map<std::string, std::string> attrs;
+  std::map<std::string, std::string> temp_attrs;
   std::vector<RemovedDataSp> children;
   std::vector<DObjPath> base_objects;
   bool is_flattened;
@@ -112,8 +114,8 @@ void CommandStack::AddListener(const CommandStackListenerFunc& listener) {
   sig_.connect(listener);
 }
 
-void CommandStack::PushCommand(const Command& cmd) {
-  CommandData cmd_data(cmd, nullptr);
+void CommandStack::PushCommand(const Command& cmd, const PostCreateFunc& post_func) {
+  CommandData cmd_data(cmd, nullptr, post_func);
   ExecRedo(cmd_data);
   if (in_batch_)
     batch_.push_back(cmd_data);
@@ -173,10 +175,11 @@ DObjectSp CommandStack::UpdateChildList(CommandType type,
                                         detail::ObjectData* data,
                                         const std::string& child_name,
                                         const std::string& obj_type,
-                                        bool is_flattened) {
+                                        bool is_flattened,
+                                        const PostCreateFunc& post_func) {
   if (in_command_)
     return CommandExecuter::UpdateChildList(
-        type, data, child_name, obj_type, is_flattened);
+        type, data, child_name, obj_type, is_flattened, post_func);
   in_command_ = true;
   CommandType cmd_type = static_cast<CommandType>(
       static_cast<int>(type)
@@ -186,7 +189,7 @@ DObjectSp CommandStack::UpdateChildList(CommandType type,
   auto path = data->Path();
   Command cmd(
       cmd_type, path, "", nil, nil, child_name, obj_type, data->Children());
-  PushCommand(cmd);
+  PushCommand(cmd, post_func);
 
   DObjectSp child;
   if (type == CommandType::kAdd) {
@@ -198,7 +201,7 @@ DObjectSp CommandStack::UpdateChildList(CommandType type,
 }
 
 void CommandStack::ExecRedo(CommandData& cmd_data) {
-  auto cmd = cmd_data.first;
+  auto cmd = std::get<Command>(cmd_data);
   auto obj = root_data_->GetDataAt(cmd.ObjPath());
   switch (cmd.Type()) {
     case CommandType::kValueAdd:
@@ -221,17 +224,20 @@ void CommandStack::ExecRedo(CommandData& cmd_data) {
     case CommandType::kAddChild:
       obj->ExecCreateChild(cmd.TargetObjectName(),
                            cmd.TargetObjectType(),
-                           false);
+                           false, true,
+                           std::get<PostCreateFunc>(cmd_data));
       break;
     case CommandType::kAddFlattenedChild:
       obj->ExecCreateChild(cmd.TargetObjectName(),
                            cmd.TargetObjectType(),
-                           true);
+                           true, true,
+                           std::get<PostCreateFunc>(cmd_data));
       break;
     case CommandType::kDeleteChild:
-      if (!cmd_data.second) {
-        cmd_data.second = std::make_shared<RemovedData>();
-        StoreChildData(obj, cmd.TargetObjectName(), cmd_data.second);
+      if (!std::get<RemovedDataSp>(cmd_data)) {
+        auto& removed_data = std::get<RemovedDataSp>(cmd_data);
+        removed_data = std::make_shared<RemovedData>();
+        StoreChildData(obj, cmd.TargetObjectName(), removed_data);
       }
       obj->ExecDeleteChild(cmd.TargetObjectName());
       break;
@@ -244,7 +250,7 @@ void CommandStack::ExecRedo(CommandData& cmd_data) {
 }
 
 void CommandStack::ExecUndo(CommandData& cmd_data) {
-  auto cmd = cmd_data.first;
+  auto cmd = std::get<Command>(cmd_data);
   auto obj = root_data_->GetDataAt(cmd.ObjPath());
   switch (cmd.Type()) {
     case CommandType::kValueAdd:
@@ -269,7 +275,7 @@ void CommandStack::ExecUndo(CommandData& cmd_data) {
       obj->ExecDeleteChild(cmd.TargetObjectName());
       break;
     case CommandType::kDeleteChild:
-      RestoreChildData(obj, cmd_data.second);
+      RestoreChildData(obj, std::get<RemovedDataSp>(cmd_data), true);
       break;
     default:
       BOOST_THROW_EXCEPTION(
@@ -290,6 +296,12 @@ void CommandStack::StoreChildData(detail::ObjectData* obj,
     data->base_objects.push_back(base->Path());
   for (auto& key : target->Keys(true))
     data->values[key] = target->Get(key);
+  for (auto& kv : target->Attrs()) {
+    if (target->IsTemporaryAttr(kv.first))
+      data->temp_attrs.insert(kv);
+    else
+      data->attrs.insert(kv);
+  }
 
   auto children = target->Children();
   data->children.reserve(children.size());
@@ -302,22 +314,36 @@ void CommandStack::StoreChildData(detail::ObjectData* obj,
 }
 
 void CommandStack::RestoreChildData(detail::ObjectData* obj,
-                                    const RemovedDataSp& data) {
+                                    const RemovedDataSp& data,
+                                    bool emit_signal) {
   DObjectSp child_obj;
-  if (obj->HasActualChild(data->name))
+  if (obj->HasActualChild(data->name)) {
     child_obj = session_->OpenObject(
         obj->Path().ChildPath(data->name), OpenMode::kReadOnly);
-  else
+    PutObjectData(root_data_->GetDataAt(child_obj->Path()), data);
+  } else {
     child_obj = obj->ExecCreateChild(
-        data->name, data->type, data->is_flattened);
+        data->name, data->type, data->is_flattened, emit_signal,
+        [this, data](auto obj) {
+          this->PutObjectData(obj->GetData(), data);
+        });
+  }
   auto child_obj_data = root_data_->GetDataAt(child_obj->Path());
-  for (auto& kv : data->values)
-    child_obj_data->Put(kv.first, kv.second);
-  for (auto& base_path : data->base_objects)
-    child_obj_data->ExecAddBase(
-        session_->OpenObject(base_path, OpenMode::kReadOnly));
   for (auto& child_data : data->children)
-    RestoreChildData(child_obj_data, child_data);
+    RestoreChildData(child_obj_data, child_data, false);
+}
+
+void CommandStack::PutObjectData(detail::ObjectData* obj,
+                                 const RemovedDataSp& data) {
+  for (auto& kv : data->values)
+    obj->Put(kv.first, kv.second);
+  for (auto& kv : data->attrs)
+    obj->SetAttr(kv.first, kv.second);
+  for (auto& kv : data->temp_attrs)
+    obj->SetTemporaryAttr(kv.first, kv.second);
+  for (auto& base_path : data->base_objects)
+    obj->ExecAddBase(
+        session_->OpenObject(base_path, OpenMode::kReadOnly));
 }
 
 }  // namespace core

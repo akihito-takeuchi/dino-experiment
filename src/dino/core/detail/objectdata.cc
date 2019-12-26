@@ -98,6 +98,14 @@ void CleanUpObjectDirectory(const fs::path& dir_path) {
 
 const std::string kBaseObjPathKeyBase = "__base_";
 const std::string kBaseObjCountKey = "__base_count";
+const std::vector<std::string> kReservedAttrs = {
+  kBaseObjPathKeyBase, kBaseObjCountKey};
+
+bool IsReservedAttr(const std::string& attr_name) {
+  auto itr = std::find(
+      kReservedAttrs.cbegin(), kReservedAttrs.cend(), attr_name);
+  return itr != kReservedAttrs.cend();
+}
 
 void StoreBaseToDict(const std::vector<BaseObjInfo>& base_info_list,
                      DValueDict& attrs) {
@@ -284,7 +292,8 @@ class ObjectData::Impl {
   DObjectSp OpenChild(const std::string& name, OpenMode mode) const;
   DObjectSp CreateChild(const std::string& name,
                         const std::string& type,
-                        bool is_flattened);
+                        bool is_flattened,
+                        const PostCreateFunc& post_func);
   DObjectSp Parent() const;
   DObjectSp TopLevelObject() const;
   DObjectSp GetObjectByPath(const DObjPath& obj_path, OpenMode mode);
@@ -588,6 +597,8 @@ std::vector<std::string> ObjectData::Impl::Keys(bool local_only) const {
 }
 
 bool ObjectData::Impl::HasAttr(const std::string& key) const {
+  if (IsReservedAttr(key))
+    THROW1(kErrReservedAttrCantBeUsed, key);
   for (auto& attrs : {attrs_, temp_attrs_}) {
     auto itr = attrs.find(key);
     if (itr != attrs.cend())
@@ -597,6 +608,8 @@ bool ObjectData::Impl::HasAttr(const std::string& key) const {
 }
 
 std::string ObjectData::Impl::Attr(const std::string& key) const {
+  if (IsReservedAttr(key))
+    THROW1(kErrReservedAttrCantBeUsed, key);
   for (auto& attrs : {temp_attrs_, attrs_}) {
     auto itr = attrs.find(key);
     if (itr != attrs.cend())
@@ -609,16 +622,21 @@ std::map<std::string, std::string> ObjectData::Impl::Attrs() const {
   std::map<std::string, std::string> result;
   for (auto& attrs : {attrs_, temp_attrs_})
     for (auto& kv : attrs)
-      result[kv.first] = boost::get<std::string>(kv.second);
+      if (!IsReservedAttr(kv.first))
+        result[kv.first] = boost::get<std::string>(kv.second);
   return result;
 }
 
 void ObjectData::Impl::SetTemporaryAttr(const std::string& key,
                                         const std::string& value) {
+  if (IsReservedAttr(key))
+    THROW1(kErrReservedAttrCantBeUsed, key);
   temp_attrs_[key] = value;
 }
 
 void ObjectData::Impl::SetAttr(const std::string& key, const std::string& value) {
+  if (IsReservedAttr(key))
+    THROW1(kErrReservedAttrCantBeUsed, key);
   SetIsActual(true);
   SetDirty(true);
   attrs_[key] = value;
@@ -630,6 +648,8 @@ void ObjectData::Impl::SetAttr(const std::string& key, const std::string& value)
 void ObjectData::Impl::SetAllAttrsToBeSaved() {
   bool set_flag = false;
   for (auto& kv : temp_attrs_) {
+    if (IsReservedAttr(kv.first))
+      continue;
     if (!set_flag) {
       SetIsActual(true);
       SetDirty(true);
@@ -641,6 +661,8 @@ void ObjectData::Impl::SetAllAttrsToBeSaved() {
 }
 
 void ObjectData::Impl::RemoveAttr(const std::string& key) {
+  if (IsReservedAttr(key))
+    THROW1(kErrReservedAttrCantBeUsed, key);
   if (HasPersistentAttr(key)) {
     SetDirty(true);
   }
@@ -652,10 +674,14 @@ void ObjectData::Impl::RemoveAttr(const std::string& key) {
 }
 
 bool ObjectData::Impl::IsTemporaryAttr(const std::string& key) const {
+  if (IsReservedAttr(key))
+    THROW1(kErrReservedAttrCantBeUsed, key);
   return temp_attrs_.find(key) != temp_attrs_.cend();
 }
 
 bool ObjectData::Impl::HasPersistentAttr(const std::string& key) const {
+  if (IsReservedAttr(key))
+    THROW1(kErrReservedAttrCantBeUsed, key);
   return attrs_.find(key) != attrs_.cend();
 }
 
@@ -800,15 +826,17 @@ DObjectSp ObjectData::Impl::OpenChild(const std::string& name, OpenMode mode) co
   return owner_->OpenObject(obj_path_.ChildPath(name), mode);
 }
 
-DObjectSp ObjectData::Impl::CreateChild(
-    const std::string& name, const std::string& type, bool is_flattened) {
+DObjectSp ObjectData::Impl::CreateChild(const std::string& name,
+                                        const std::string& type,
+                                        bool is_flattened,
+                                        const PostCreateFunc& post_func) {
   if (HasActualChild(name)) {
     auto child_path = obj_path_.ChildPath(name);
     auto child = owner_->OpenObject(child_path, OpenMode::kEditable);
     return child;
   }
   return Executer()->UpdateChildList(
-      CommandType::kAdd, self_, name, type, is_flattened);
+      CommandType::kAdd, self_, name, type, is_flattened, post_func);
 }
 
 DObjectSp ObjectData::Impl::Parent() const {
@@ -843,7 +871,8 @@ void ObjectData::Impl::DeleteChild(const std::string& name) {
     THROW2(kErrChildNotExist, name, Path().String());
   auto child_info = ChildInfo(name);
   Executer()->UpdateChildList(
-      CommandType::kDelete, self_, name, child_info.Type(), IsChildFlat(name));
+      CommandType::kDelete, self_, name, child_info.Type(),
+      IsChildFlat(name), PostCreateFunc());
 }
 
 void ObjectData::Impl::AcquireWriteLock() {
@@ -1390,14 +1419,17 @@ void ObjectData::Impl::Load() {
       throw;
     }
   }
-  for (auto descendant : descendants) {
-    descendant->impl_->enable_sorting_ = true;
-    descendant->impl_->SortChildren();
-  }
   if (effective_base_info_list_.size() > 0)
     RefreshChildrenInBase();
   else
     SortChildren();
+  for (auto descendant : descendants) {
+    descendant->impl_->enable_sorting_ = true;
+    if (descendant->impl_->effective_base_info_list_.size() > 0)
+      descendant->impl_->RefreshChildrenInBase();
+    else
+      descendant->impl_->SortChildren();
+  }
   is_actual_ = true;
   SetDirty(false);
 }
@@ -1792,8 +1824,9 @@ DObjectSp ObjectData::OpenChild(const std::string& name, OpenMode mode) const {
 
 DObjectSp ObjectData::CreateChild(const std::string& name,
                                   const std::string& type,
-                                  bool is_flattened) {
-  return impl_->CreateChild(name, type, is_flattened);
+                                  bool is_flattened,
+                                  const PostCreateFunc& post_func) {
+  return impl_->CreateChild(name, type, is_flattened, post_func);
 }
 
 DObjectSp ObjectData::Parent() const {
@@ -1935,13 +1968,16 @@ void ObjectData::ExecAddValue(const std::string& key,
 
 DObjectSp ObjectData::ExecCreateChild(const std::string& name,
                                       const std::string& type,
-                                      bool is_flattened) {
+                                      bool is_flattened,
+                                      bool emit_signal,
+                                      const PostCreateFunc& post_create_func) {
   impl_->SetIsActual(true);
   auto child_path = Path().ChildPath(name);
   auto prev_children = Children();
   Command cmd(CommandType::kAddChild, Path(),
               "", nil, nil, child_path, type, prev_children);
-  impl_->EmitSignal(cmd, ListenerCallPoint::kPre);
+  if (emit_signal)
+    impl_->EmitSignal(cmd, ListenerCallPoint::kPre);
   DObjectSp child;
   if (HasActualChild(name)) {
     child = impl_->Owner()->OpenObject(child_path, OpenMode::kEditable);
@@ -1950,7 +1986,11 @@ DObjectSp ObjectData::ExecCreateChild(const std::string& name,
     if (is_flattened)
       SetDirty(true);
   }
-  impl_->EmitSignal(cmd, ListenerCallPoint::kPost);
+  if (post_create_func)
+    post_create_func(child);
+  SortChildren();
+  if (emit_signal)
+    impl_->EmitSignal(cmd, ListenerCallPoint::kPost);
   return child;
 }
 
